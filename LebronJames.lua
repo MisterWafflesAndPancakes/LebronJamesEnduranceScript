@@ -306,7 +306,6 @@ return function()
             local char = player.Character
             if char then
                 pcall(function() char:BreakJoints() end)
-                print("Killed character for role:", role)
             end
     
             -- Wait for respawn and place
