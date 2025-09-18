@@ -1,12 +1,11 @@
 return function()
-    -- 🔧 Service Declarations
     local RunService = game:GetService("RunService")
     local UserInputService = game:GetService("UserInputService")
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local player = Players.LocalPlayer
     
-    -- ⚙️ Role Configurations
+    -- ⚙ Role Configurations
     local configs = {
         [1] = {
             name = "PLAYER 1: DUMMY",
@@ -22,14 +21,51 @@ return function()
         },
         [3] = {
             name = "SOLO MODE",
-            teleportDelay = 0.3,
-            deathDelay = 0.5,
-            cycleDelay = 5.8
+            teleportDelay = 0.5,
+            deathDelay = 0.1,
+            cycleDelay = 5.6
         }
     }
     
-    -- 🌀 Core Loop
-    local function runLoop(role)
+    -- Track win detection state for each role
+    local winDetected = {
+        [1] = false,
+        [2] = false
+    }
+    
+    -- RemoteEvent for win detection
+    local SoundEvent = ReplicatedStorage:WaitForChild("Sound")
+    
+    local function listenForWin(role)
+        local connection
+        connection = SoundEvent.OnClientEvent:Connect(function(action, data)
+            if activeRole ~= role then return end
+            if action == "Play" and data and data.Name == "Win" then
+                print("Win signal received for role " .. role)
+                winDetected[role] = true
+                connection:Disconnect()
+    
+                -- Only restart if the OTHER role has not detected a win
+                if role == 1 and not winDetected[2] then
+                    activeRole = nil
+                    task.wait(15)
+                    activeRole = 1
+                    runLoop(1)
+                elseif role == 2 and not winDetected[1] then
+                    activeRole = nil
+                    task.wait(12)
+                    activeRole = 2
+                    runLoop(2)
+                end
+            end
+        end)
+    end
+    
+    -- Core Loop
+    function runLoop(role)
+        -- Reset this role's win flag at the start of a new loop
+        winDetected[role] = false
+    
         local points = role == 1 and {
             workspace.Spar_Ring1.Player1_Button.CFrame,
             workspace.Spar_Ring4.Player1_Button.CFrame
@@ -73,11 +109,21 @@ return function()
                 if char then pcall(function() char:BreakJoints() end) end
     
             elseif phase == "respawn" then
-                local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    phase = "wait"
-                    phaseStart = os.clock()
-                end
+                local start = os.clock()
+                local respawnConnection
+                respawnConnection = RunService.Heartbeat:Connect(function()
+                    local char = player.Character
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    
+                    if hrp then
+                        phase = "wait"
+                        phaseStart = os.clock()
+                        respawnConnection:Disconnect()
+                    elseif os.clock() - start > 6 then
+                        print("[RESPAWN] Timeout — HRP not found")
+                        respawnConnection:Disconnect()
+                    end
+                end)
     
             elseif phase == "wait" and elapsed >= config.cycleDelay then
                 phase = "teleport"
@@ -86,38 +132,12 @@ return function()
             end
         end)
     
-    -- 🥇 Win Detection via RemoteEvent
-    local SoundEvent = game:GetService("ReplicatedStorage"):WaitForChild("Sound")
+        -- Win detection for roles 1 and 2
+        if role == 1 or role == 2 then
+            listenForWin(role)
+        end
     
-    local function listenForWin(role)
-        local connection
-        connection = SoundEvent.OnClientEvent:Connect(function(action, data)
-            if activeRole ~= role then return end
-            if action == "Play" and data and data.Name == "Win" then
-                print("Win signal received for role " .. role)
-                connection:Disconnect()
-    
-                if role == 1 then
-                    activeRole = nil
-                    task.wait(15)
-                    activeRole = 1
-                    runLoop(1)
-                elseif role == 2 then
-                    activeRole = nil
-                    task.wait(12)
-                    activeRole = 2
-                    runLoop(2)
-                end
-            end
-        end)
-    end
-    
-    -- Call this inside runLoop(role) for roles 1 and 2:
-    if role == 1 or role == 2 then
-        listenForWin(role)
-    end
-    
-        -- 🧍 SOLO Fallback (Player 1 only)
+        -- SOLO fallback for role 1
         if role == 1 then
             task.spawn(function()
                 local checkStart = os.clock()
@@ -139,13 +159,13 @@ return function()
         end
     end
     
-    -- 🧱 GUI Setup
+    -- GUI Setup
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "RoleToggleGui"
     screenGui.ResetOnSpawn = false
     screenGui.Parent = player:WaitForChild("PlayerGui")
     
-    -- 🧊 Main Container Frame
+    -- Main Container Frame
     local mainFrame = Instance.new("Frame")
     mainFrame.Size = UDim2.new(0, 450, 0, 300)
     mainFrame.Position = UDim2.new(0.5, -225, 0.5, -150)
@@ -154,7 +174,7 @@ return function()
     mainFrame.BorderSizePixel = 0
     mainFrame.Parent = screenGui
     
-    -- 🖱 Make GUI Draggable
+    -- Make GUI Draggable
     local function makeDraggable(gui)
         local dragging = false
         local dragStart, startPos
@@ -186,7 +206,7 @@ return function()
     
     makeDraggable(mainFrame)
     
-    -- 🧠 Create Button Utility
+    -- Create Button Utility
     local function createButton(text, position)
         local button = Instance.new("TextButton")
         button.Size = UDim2.new(0, 200, 0, 40)
@@ -202,15 +222,13 @@ return function()
         return button
     end
     
-    -- 🧱 GUI Elements
-    local button1 = createButton("PLAYER 1: DUMMY", UDim2.new(0, 20, 0, 60))
-    local button2 = createButton("PLAYER 2: MAIN", UDim2.new(0, 20, 0, 110))
-    local soloButton = createButton("SOLO MODE", UDim2.new(0, 240, 0, 60))
-    local onOffButton = createButton("OFF", UDim2.new(0, 240, 0, 110))
+    -- GUI Elements (cleaned)
+    local soloButton = createButton("SOLO MODE", UDim2.new(0, 20, 0, 60))
+    local onOffButton = createButton("OFF", UDim2.new(0, 230, 0, 60))
     
     local usernameBox = Instance.new("TextBox")
-    usernameBox.Size = UDim2.new(0, 200, 0, 30)
-    usernameBox.Position = UDim2.new(0, 20, 0, 170)
+    usernameBox.Size = UDim2.new(0, 200, 0, 40) -- match button height
+    usernameBox.Position = UDim2.new(0, 20, 0, 120) -- bigger gap
     usernameBox.PlaceholderText = "Target Username"
     usernameBox.Font = Enum.Font.Arcade
     usernameBox.TextSize = 18
@@ -220,8 +238,8 @@ return function()
     usernameBox.Parent = mainFrame
     
     local roleBox = Instance.new("TextBox")
-    roleBox.Size = UDim2.new(0, 200, 0, 30)
-    roleBox.Position = UDim2.new(0, 20, 0, 210)
+    roleBox.Size = UDim2.new(0, 200, 0, 40) -- match button height
+    roleBox.Position = UDim2.new(0, 230, 0, 120) -- bigger gap
     roleBox.PlaceholderText = "#AFK or #AFK2"
     roleBox.Font = Enum.Font.Arcade
     roleBox.TextSize = 18
@@ -230,7 +248,7 @@ return function()
     roleBox.BorderSizePixel = 0
     roleBox.Parent = mainFrame
     
-    -- 🏷️ GUI Title
+    -- 🏷 GUI Title
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Size = UDim2.new(1, 0, 0, 40)
     titleLabel.Position = UDim2.new(0, 0, 0, 0)
@@ -240,15 +258,59 @@ return function()
     titleLabel.TextColor3 = Color3.new(1, 1, 1)
     titleLabel.BackgroundTransparency = 1
     titleLabel.Parent = mainFrame
+
+    -- 🔽 Minimize Button (bottom-right corner)
+    local minimizeButton = Instance.new("TextButton")
+    minimizeButton.Size = UDim2.new(0, 40, 0, 40)
+    minimizeButton.AnchorPoint = Vector2.new(1, 1) -- anchor to bottom-right
+    minimizeButton.Position = UDim2.new(1, -5, 1, -5) -- 5px padding from edges
+    minimizeButton.Text = "-"
+    minimizeButton.Font = Enum.Font.Arcade
+    minimizeButton.TextSize = 24
+    minimizeButton.TextColor3 = Color3.new(1, 1, 1)
+    minimizeButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    minimizeButton.BorderSizePixel = 0
+    minimizeButton.Parent = mainFrame
+
+    -- Elements to hide when minimized
+    local minimized = false
+    local guiElements = {
+        soloButton,
+        onOffButton,
+        usernameBox,
+        roleBox
+    }
     
-    -- 🧠 Role Toggle Reset
+    -- store the original frame size so we can restore it later
+    local originalSize = mainFrame.Size
+    local originalPos = mainFrame.Position
+    
+    minimizeButton.MouseButton1Click:Connect(function()
+        minimized = not minimized
+    
+        for _, element in ipairs(guiElements) do
+            element.Visible = not minimized
+        end
+    
+        minimizeButton.Text = minimized and "+" or "-"
+    
+        if minimized then
+            mainFrame.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, 50)
+            mainFrame.Position = UDim2.new(originalPos.X.Scale, originalPos.X.Offset, originalPos.Y.Scale, originalPos.Y.Offset + (originalSize.Y.Offset - 50)/2)
+        else
+            mainFrame.Size = originalSize
+            mainFrame.Position = originalPos
+        end
+    end)
+
+    -- Role Toggle Reset
     local function forceToggleOff()
         activeRole = nil
         onOffButton.Text = "OFF"
         onOffButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
     end
     
-    -- 🧠 Role Validation and Assignment
+    -- Role Validation and Assignment
     local function validateAndAssignRole()
         local targetName = usernameBox.Text
         local roleCommand = roleBox.Text
@@ -274,7 +336,7 @@ return function()
         runLoop(activeRole)
     end
     
-    -- 🔘 ON/OFF Button Logic
+    -- ON/OFF Button Logic
     onOffButton.MouseButton1Click:Connect(function()
         if activeRole then
             forceToggleOff()
@@ -283,7 +345,7 @@ return function()
         end
     end)
     
-    -- 🧍 SOLO Button Logic
+    -- SOLO Button Logic
     soloButton.MouseButton1Click:Connect(function()
         forceToggleOff()
         task.wait(1)
