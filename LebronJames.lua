@@ -206,21 +206,21 @@ return function()
     local configs = {
         [1] = {
             name = "PLAYER 1: DUMMY",
-            teleportDelay = 0.3,
-            deathDelay = 0.5,
-            cycleDelay = 5.8
+            teleportDelay = 0.4,
+            deathDelay = 0.6,
+            cycleDelay = 0.2
         },
         [2] = {
             name = "PLAYER 2: MAIN",
-            teleportDelay = 0.3,
-            deathDelay = 0.5,
-            cycleDelay = 5.8
+            teleportDelay = 0.4,
+            deathDelay = 0.6,
+            cycleDelay = 0.1
         },
         [3] = {
             name = "SOLO MODE",
             teleportDelay = 0.5,
             deathDelay = 0.1,
-            cycleDelay = 5.6
+            cycleDelay = 0.1
         }
     }
     
@@ -272,27 +272,28 @@ return function()
         end)
     end
     
-    -- Core Loop
     function runLoop(role)
         -- Reset this role's win flag at the start of a new loop
         winDetected[role] = false
     
         local points = role == 1 and {
             workspace.Spar_Ring1.Player1_Button.CFrame,
-            workspace.Spar_Ring4.Player1_Button.CFrame
+            workspace.Spar_Ring2.Player1_Button.CFrame,
+            workspace.Spar_Ring4.Player1_Button.CFrame,
         } or role == 2 and {
             workspace.Spar_Ring1.Player2_Button.CFrame,
+            workspace.Spar_Ring2.Player2_Button.CFrame,
             workspace.Spar_Ring4.Player2_Button.CFrame
         } or role == 3 and {
             workspace.Spar_Ring2.Player1_Button.CFrame,
             workspace.Spar_Ring2.Player2_Button.CFrame
+            workspace.Spar_Ring4.Player1_Button.CFrame,
+            workspace.Spar_Ring4.Player2_Button.CFrame
         }
     
         if not points then return end
         local config = configs[role]
         local index = 1
-        local phase = "teleport"
-        local phaseStart = os.clock()
     
         local connection
         connection = RunService.Heartbeat:Connect(function()
@@ -301,44 +302,50 @@ return function()
                 return
             end
     
-            local now = os.clock()
-            local elapsed = now - phaseStart
-    
-            if phase == "teleport" and elapsed >= config.teleportDelay then
-                phase = "kill"
-                phaseStart = now
-                local char = player.Character or player.CharacterAdded:Wait()
-                local hrp = char:FindFirstChild("HumanoidRootPart")
-                if hrp then hrp.CFrame = points[index] end
-    
-            elseif phase == "kill" and elapsed >= config.deathDelay then
-                phase = "respawn"
-                phaseStart = now
-                local char = player.Character
-                if char then pcall(function() char:BreakJoints() end) end
-    
-            elseif phase == "respawn" then
-                local start = os.clock()
-                local respawnConnection
-                respawnConnection = RunService.Heartbeat:Connect(function()
-                    local char = player.Character
-                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    
-                    if hrp then
-                        phase = "wait"
-                        phaseStart = os.clock()
-                        respawnConnection:Disconnect()
-                    elseif os.clock() - start > 6 then
-                        print("[RESPAWN] Timeout — HRP not found")
-                        respawnConnection:Disconnect()
-                    end
-                end)
-    
-            elseif phase == "wait" and elapsed >= config.cycleDelay then
-                phase = "teleport"
-                phaseStart = os.clock()
-                index = index % #points + 1
+            -- Kill current character
+            local char = player.Character
+            if char then
+                pcall(function() char:BreakJoints() end)
+                print("Killed character for role:", role)
             end
+    
+            -- Wait for respawn and place
+            coroutine.wrap(function()
+                player.CharacterAdded:Wait()
+                local newChar = player.Character
+                if not newChar then return end
+    
+                local hrp
+                local start = os.clock()
+                repeat
+                    hrp = newChar:FindFirstChild("HumanoidRootPart")
+                    if not hrp then RunService.Heartbeat:Wait() end
+                until hrp or os.clock() - start > 8
+    
+                if hrp then
+                    hrp.Anchored = false
+                    local hum = newChar:FindFirstChildOfClass("Humanoid")
+                    if hum then
+                        hum:ChangeState(Enum.HumanoidStateType.Running)
+                    end
+                    newChar.PrimaryPart = hrp
+                    newChar:SetPrimaryPartCFrame(points[index])
+                    print("Placed at ring index:", index)
+                else
+                    warn("[RESPAWN] Timeout — using fallback point")
+                    local hum = newChar:FindFirstChildOfClass("Humanoid")
+                    if hum then
+                        hum:MoveTo(points[index].Position)
+                    end
+                end
+    
+                -- Wait cycleDelay, then advance
+                task.wait(config.cycleDelay)
+                index = (index % #points) + 1
+                if activeRole == role then
+                    runLoop(role) -- restart loop for next point
+                end
+            end)()
         end)
     
         -- Win detection for roles 1 and 2
