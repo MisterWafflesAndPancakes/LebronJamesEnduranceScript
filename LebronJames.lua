@@ -329,7 +329,6 @@ return function()
                     end
                     newChar.PrimaryPart = hrp
                     newChar:SetPrimaryPartCFrame(points[index])
-                    print("Placed at ring index:", index)
                 else
                     warn("[RESPAWN] Timeout — using fallback point")
                     local hum = newChar:FindFirstChildOfClass("Humanoid")
