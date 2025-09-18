@@ -273,7 +273,6 @@ return function()
     end
     
     function runLoop(role)
-        -- Reset this role's win flag at the start of a new loop
         winDetected[role] = false
     
         local points = role == 1 and {
@@ -295,32 +294,28 @@ return function()
         local config = configs[role]
         local index = 1
     
-        local connection
-        connection = RunService.Heartbeat:Connect(function()
-            if activeRole ~= role then
-                connection:Disconnect()
-                return
-            end
+        task.spawn(function()
+            while activeRole == role do
+                -- Kill
+                local char = player.Character
+                if char then
+                    pcall(function() char:BreakJoints() end)
+                end
     
-            -- Kill current character
-            local char = player.Character
-            if char then
-                pcall(function() char:BreakJoints() end)
-            end
-    
-            -- Wait for respawn and place
-            coroutine.wrap(function()
+                -- Wait for respawn
                 player.CharacterAdded:Wait()
                 local newChar = player.Character
-                if not newChar then return end
+                if not newChar then break end
     
+                -- Wait for HRP or timeout
                 local hrp
                 local start = os.clock()
                 repeat
                     hrp = newChar:FindFirstChild("HumanoidRootPart")
-                    if not hrp then RunService.Heartbeat:Wait() end
+                    if not hrp then task.wait() end
                 until hrp or os.clock() - start > 8
     
+                -- Place or fallback
                 if hrp then
                     hrp.Anchored = false
                     local hum = newChar:FindFirstChildOfClass("Humanoid")
@@ -337,21 +332,23 @@ return function()
                     end
                 end
     
-                -- Wait cycleDelay, then advance
-                task.wait(config.cycleDelay)
-                index = (index % #points) + 1
-                if activeRole == role then
-                    runLoop(role) -- restart loop for next point
+                -- Wait cycleDelay using os.clock()
+                local waitStart = os.clock()
+                while os.clock() - waitStart < config.cycleDelay and activeRole == role do
+                    task.wait()
                 end
-            end)()
-        end)
     
-        -- Win detection for roles 1 and 2
+                -- Advance index
+                index = (index % #points) + 1
+            end
+        end)
+
+        -- Listens For Win
         if role == 1 or role == 2 then
             listenForWin(role)
         end
-    
-        -- SOLO fallback for role 1
+
+        -- Solo Loop Fallback
         if role == 1 then
             task.spawn(function()
                 local checkStart = os.clock()
