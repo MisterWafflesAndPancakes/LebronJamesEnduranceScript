@@ -1,163 +1,10 @@
 return function()
+    -- Get Services
     local RunService = game:GetService("RunService")
     local UserInputService = game:GetService("UserInputService")
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local player = Players.LocalPlayer
-    
-    -- ⚙ Role Configurations
-    local configs = {
-        [1] = {
-            name = "PLAYER 1: DUMMY",
-            teleportDelay = 0.3,
-            deathDelay = 0.5,
-            cycleDelay = 5.8
-        },
-        [2] = {
-            name = "PLAYER 2: MAIN",
-            teleportDelay = 0.3,
-            deathDelay = 0.5,
-            cycleDelay = 5.8
-        },
-        [3] = {
-            name = "SOLO MODE",
-            teleportDelay = 0.5,
-            deathDelay = 0.1,
-            cycleDelay = 5.6
-        }
-    }
-    
-    -- Track win detection state for each role
-    local winDetected = {
-        [1] = false,
-        [2] = false
-    }
-    
-    -- RemoteEvent for win detection
-    local SoundEvent = ReplicatedStorage:WaitForChild("Sound")
-    
-    local function listenForWin(role)
-        local connection
-        connection = SoundEvent.OnClientEvent:Connect(function(action, data)
-            if activeRole ~= role then return end
-            if action == "Play" and data and data.Name == "Win" then
-                print("Win signal received for role " .. role)
-                winDetected[role] = true
-                connection:Disconnect()
-    
-                -- Only restart if the OTHER role has not detected a win
-                if role == 1 and not winDetected[2] then
-                    activeRole = nil
-                    task.wait(15)
-                    activeRole = 1
-                    runLoop(1)
-                elseif role == 2 and not winDetected[1] then
-                    activeRole = nil
-                    task.wait(12)
-                    activeRole = 2
-                    runLoop(2)
-                end
-            end
-        end)
-    end
-    
-    -- Core Loop
-    function runLoop(role)
-        -- Reset this role's win flag at the start of a new loop
-        winDetected[role] = false
-    
-        local points = role == 1 and {
-            workspace.Spar_Ring1.Player1_Button.CFrame,
-            workspace.Spar_Ring4.Player1_Button.CFrame
-        } or role == 2 and {
-            workspace.Spar_Ring1.Player2_Button.CFrame,
-            workspace.Spar_Ring4.Player2_Button.CFrame
-        } or role == 3 and {
-            workspace.Spar_Ring2.Player1_Button.CFrame,
-            workspace.Spar_Ring2.Player2_Button.CFrame,
-            workspace.Spar_Ring3.Player1_Button.CFrame,
-            workspace.Spar_Ring3.Player2_Button.CFrame
-        }
-    
-        if not points then return end
-        local config = configs[role]
-        local index = 1
-        local phase = "teleport"
-        local phaseStart = os.clock()
-    
-        local connection
-        connection = RunService.Heartbeat:Connect(function()
-            if activeRole ~= role then
-                connection:Disconnect()
-                return
-            end
-    
-            local now = os.clock()
-            local elapsed = now - phaseStart
-    
-            if phase == "teleport" and elapsed >= config.teleportDelay then
-                phase = "kill"
-                phaseStart = now
-                local char = player.Character or player.CharacterAdded:Wait()
-                local hrp = char:FindFirstChild("HumanoidRootPart")
-                if hrp then hrp.CFrame = points[index] end
-    
-            elseif phase == "kill" and elapsed >= config.deathDelay then
-                phase = "respawn"
-                phaseStart = now
-                local char = player.Character
-                if char then pcall(function() char:BreakJoints() end) end
-    
-            elseif phase == "respawn" then
-                local start = os.clock()
-                local respawnConnection
-                respawnConnection = RunService.Heartbeat:Connect(function()
-                    local char = player.Character
-                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    
-                    if hrp then
-                        phase = "wait"
-                        phaseStart = os.clock()
-                        respawnConnection:Disconnect()
-                    elseif os.clock() - start > 6 then
-                        print("[RESPAWN] Timeout — HRP not found")
-                        respawnConnection:Disconnect()
-                    end
-                end)
-    
-            elseif phase == "wait" and elapsed >= config.cycleDelay then
-                phase = "teleport"
-                phaseStart = os.clock()
-                index = index % #points + 1
-            end
-        end)
-    
-        -- Win detection for roles 1 and 2
-        if role == 1 or role == 2 then
-            listenForWin(role)
-        end
-    
-        -- SOLO fallback for role 1
-        if role == 1 then
-            task.spawn(function()
-                local checkStart = os.clock()
-                while activeRole == 1 do
-                    local targetPlayer = Players:FindFirstChild(usernameBox.Text)
-                    if not targetPlayer and os.clock() - checkStart >= 15 then
-                        print("Player 2 missing — switching to SOLO")
-                        activeRole = nil
-                        task.wait(1)
-                        activeRole = 3
-                        runLoop(3)
-                        break
-                    elseif targetPlayer then
-                        checkStart = os.clock()
-                    end
-                    task.wait(1)
-                end
-            end)
-        end
-    end
     
     -- GUI Setup
     local screenGui = Instance.new("ScreenGui")
@@ -258,8 +105,8 @@ return function()
     titleLabel.TextColor3 = Color3.new(1, 1, 1)
     titleLabel.BackgroundTransparency = 1
     titleLabel.Parent = mainFrame
-
-    -- 🔽 Minimize Button (bottom-right corner)
+    
+    -- Minimize Button (bottom-right corner)
     local minimizeButton = Instance.new("TextButton")
     minimizeButton.Size = UDim2.new(0, 40, 0, 40)
     minimizeButton.AnchorPoint = Vector2.new(1, 1) -- anchor to bottom-right
@@ -271,7 +118,7 @@ return function()
     minimizeButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
     minimizeButton.BorderSizePixel = 0
     minimizeButton.Parent = mainFrame
-
+    
     -- Elements to hide when minimized
     local minimized = false
     local guiElements = {
@@ -302,7 +149,7 @@ return function()
             mainFrame.Position = originalPos
         end
     end)
-
+    
     -- Role Toggle Reset
     local function forceToggleOff()
         activeRole = nil
@@ -354,4 +201,170 @@ return function()
         onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
         runLoop(3)
     end)
+    
+    -- ⚙ Role Configurations
+    local configs = {
+        [1] = {
+            name = "PLAYER 1: DUMMY",
+            teleportDelay = 0.3,
+            deathDelay = 0.5,
+            cycleDelay = 5.8
+        },
+        [2] = {
+            name = "PLAYER 2: MAIN",
+            teleportDelay = 0.3,
+            deathDelay = 0.5,
+            cycleDelay = 5.8
+        },
+        [3] = {
+            name = "SOLO MODE",
+            teleportDelay = 0.5,
+            deathDelay = 0.1,
+            cycleDelay = 5.6
+        }
+    }
+    
+    -- Track win detection state for each role
+    local winDetected = {
+        [1] = false,
+        [2] = false
+    }
+    
+    -- RemoteEvent for win detection
+    local SoundEvent = ReplicatedStorage:WaitForChild("Sound")
+    
+    -- Listen for any player's win (updates winDetected for both roles)
+    SoundEvent.OnClientEvent:Connect(function(action, data, playerName)
+        if action == "Play" and data and data.Name == "Win" then
+            if playerName == "Player1" then
+                winDetected[1] = true
+                print("Player 1 win detected")
+            elseif playerName == "Player2" then
+                winDetected[2] = true
+                print("Player 2 win detected")
+            end
+        end
+    end)
+    
+    -- Role-specific listener for the local role
+    local function listenForWin(role)
+        local connection
+        connection = SoundEvent.OnClientEvent:Connect(function(action, data, playerName)
+            if activeRole ~= role then return end
+            if action == "Play" and data and data.Name == "Win" and playerName == player.Name then
+                print("Local win signal for role " .. role)
+                winDetected[role] = true
+                connection:Disconnect()
+    
+                -- Restart logic based on other role's win state
+                if role == 1 and winDetected[2] and not winDetected[1] then
+                    activeRole = nil
+                    task.wait(17)
+                    activeRole = 1
+                    runLoop(1)
+                elseif role == 2 and winDetected[1] and not winDetected[2] then
+                    activeRole = nil
+                    task.wait(13)
+                    activeRole = 2
+                    runLoop(2)
+                end
+            end
+        end)
+    end
+    
+    -- Core Loop
+    function runLoop(role)
+        -- Reset this role's win flag at the start of a new loop
+        winDetected[role] = false
+    
+        local points = role == 1 and {
+            workspace.Spar_Ring1.Player1_Button.CFrame,
+            workspace.Spar_Ring4.Player1_Button.CFrame
+        } or role == 2 and {
+            workspace.Spar_Ring1.Player2_Button.CFrame,
+            workspace.Spar_Ring4.Player2_Button.CFrame
+        } or role == 3 and {
+            workspace.Spar_Ring2.Player1_Button.CFrame,
+            workspace.Spar_Ring2.Player2_Button.CFrame
+        }
+    
+        if not points then return end
+        local config = configs[role]
+        local index = 1
+        local phase = "teleport"
+        local phaseStart = os.clock()
+    
+        local connection
+        connection = RunService.Heartbeat:Connect(function()
+            if activeRole ~= role then
+                connection:Disconnect()
+                return
+            end
+    
+            local now = os.clock()
+            local elapsed = now - phaseStart
+    
+            if phase == "teleport" and elapsed >= config.teleportDelay then
+                phase = "kill"
+                phaseStart = now
+                local char = player.Character or player.CharacterAdded:Wait()
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if hrp then hrp.CFrame = points[index] end
+    
+            elseif phase == "kill" and elapsed >= config.deathDelay then
+                phase = "respawn"
+                phaseStart = now
+                local char = player.Character
+                if char then pcall(function() char:BreakJoints() end) end
+    
+            elseif phase == "respawn" then
+                local start = os.clock()
+                local respawnConnection
+                respawnConnection = RunService.Heartbeat:Connect(function()
+                    local char = player.Character
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    
+                    if hrp then
+                        phase = "wait"
+                        phaseStart = os.clock()
+                        respawnConnection:Disconnect()
+                    elseif os.clock() - start > 6 then
+                        print("[RESPAWN] Timeout — HRP not found")
+                        respawnConnection:Disconnect()
+                    end
+                end)
+    
+            elseif phase == "wait" and elapsed >= config.cycleDelay then
+                phase = "teleport"
+                phaseStart = os.clock()
+                index = index % #points + 1
+            end
+        end)
+    
+        -- Win detection for roles 1 and 2
+        if role == 1 or role == 2 then
+            listenForWin(role)
+        end
+    
+        -- SOLO fallback for role 1
+        if role == 1 then
+            task.spawn(function()
+                local checkStart = os.clock()
+                while activeRole == 1 do
+                    local targetPlayer = Players:FindFirstChild(usernameBox.Text)
+                    if not targetPlayer and os.clock() - checkStart >= 15 then
+                        print("Player 2 missing — switching to SOLO")
+                        activeRole = nil
+                        task.wait(1)
+                        activeRole = 3
+                        runLoop(3)
+                        break
+                    elseif targetPlayer then
+                        checkStart = os.clock()
+                    end
+                    task.wait(1)
+                end
+            end)
+        end
+    end
 end
