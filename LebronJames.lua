@@ -274,7 +274,10 @@ return function()
     
     function runLoop(role)
         winDetected[role] = false
+        local config = configs[role]
+        local index = 1
     
+        -- Define teleport points
         local points = role == 1 and {
             workspace.Spar_Ring1.Player1_Button.CFrame,
             workspace.Spar_Ring2.Player1_Button.CFrame,
@@ -291,72 +294,90 @@ return function()
         }
     
         if not points then return end
-        local config = configs[role]
-        local index = 1
     
+        -- Core loop
         task.spawn(function()
             while activeRole == role do
-                -- Kill
+                print("[LOOP] Role", role, "starting cycle")
+    
+                -- Kill character
                 local char = player.Character
                 if char then
                     pcall(function() char:BreakJoints() end)
+                    print("[LOOP] Character killed")
                 end
     
                 -- Wait for respawn
-                player.CharacterAdded:Wait()
-                local newChar = player.Character
-                if not newChar then break end
+                local newChar
+                local charStart = os.clock()
+                repeat
+                    newChar = player.Character
+                    task.wait()
+                until newChar or os.clock() - charStart > 8
+                if not newChar then
+                    warn("[RESPAWN] Character load failed")
+                    break
+                end
     
-                -- Wait for HRP or timeout
-                local hrp
+                -- Wait for HRP and Humanoid
+                local hrp, hum
                 local start = os.clock()
                 repeat
                     hrp = newChar:FindFirstChild("HumanoidRootPart")
-                    if not hrp then task.wait() end
-                until hrp or os.clock() - start > 8
+                    hum = newChar:FindFirstChildOfClass("Humanoid")
+                    task.wait()
+                until (hrp and hum) or os.clock() - start > 8
     
-                -- Place or fallback
-                if hrp then
-                    hrp.Anchored = false
-                    local hum = newChar:FindFirstChildOfClass("Humanoid")
-                    if hum then
-                        hum:ChangeState(Enum.HumanoidStateType.Running)
-                    end
-                    newChar.PrimaryPart = hrp
-                    newChar:SetPrimaryPartCFrame(points[index])
-                else
-                    warn("[RESPAWN] Timeout — using fallback point")
-                    local hum = newChar:FindFirstChildOfClass("Humanoid")
-                    if hum then
-                        hum:MoveTo(points[index].Position)
-                    end
+                -- Reset Humanoid state
+                if hum then
+                    hum:ChangeState(Enum.HumanoidStateType.Running)
+                    print("[RESPAWN] Humanoid state reset")
                 end
     
-                -- Wait cycleDelay using os.clock()
+                -- Teleport or fallback
+                if hrp then
+                    hrp.Anchored = false
+                    newChar.PrimaryPart = hrp
+                    local success = pcall(function()
+                        newChar:SetPrimaryPartCFrame(points[index])
+                    end)
+                    if success then
+                        print("[RESPAWN] Teleported to point", index)
+                    else
+                        warn("[RESPAWN] Teleport failed — fallback MoveTo")
+                        if hum then hum:MoveTo(points[index].Position) end
+                    end
+                else
+                    warn("[RESPAWN] HRP missing — fallback MoveTo")
+                    if hum then hum:MoveTo(points[index].Position) end
+                end
+    
+                -- Wait cycleDelay
                 local waitStart = os.clock()
                 while os.clock() - waitStart < config.cycleDelay and activeRole == role do
-                    task.wait()
+                    RunService.Heartbeat:Wait()
                 end
     
                 -- Advance index
                 index = (index % #points) + 1
             end
         end)
-
-        -- Listens For Win
+    
+        -- Win listener
         if role == 1 or role == 2 then
             listenForWin(role)
         end
-
-        -- Solo Loop Fallback
+    
+        -- SOLO fallback
         if role == 1 then
             task.spawn(function()
                 local checkStart = os.clock()
                 while activeRole == 1 do
                     local targetPlayer = Players:FindFirstChild(usernameBox.Text)
                     if not targetPlayer and os.clock() - checkStart >= 15 then
-                        print("Player 2 missing — switching to SOLO")
+                        print("[SOLO] Player 2 missing — switching to SOLO")
                         activeRole = nil
+                        stopLoop()
                         task.wait(1)
                         activeRole = 3
                         runLoop(3)
