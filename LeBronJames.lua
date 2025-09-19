@@ -21,7 +21,7 @@ return function()
     mainFrame.BorderSizePixel = 0
     mainFrame.Parent = screenGui
     
-    -- Make GUI Draggable
+    -- Make GUI Universally Draggable
     local function makeDraggable(gui)
         local dragging = false
         local dragStart, startPos
@@ -72,22 +72,24 @@ return function()
     -- GUI Elements
     local soloButton = createButton("SOLO MODE", UDim2.new(0, 20, 0, 60))
     local onOffButton = createButton("OFF", UDim2.new(0, 230, 0, 60))
-    
+
+    -- Username Text Box 
     local usernameBox = Instance.new("TextBox")
     usernameBox.Size = UDim2.new(0, 200, 0, 40)
     usernameBox.Position = UDim2.new(0, 20, 0, 120)
-    usernameBox.PlaceholderText = "Target Username"
+    usernameBox.PlaceholderText = "Username"
     usernameBox.Font = Enum.Font.Arcade
     usernameBox.TextSize = 18
     usernameBox.TextColor3 = Color3.new(1, 1, 1)
     usernameBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     usernameBox.BorderSizePixel = 0
     usernameBox.Parent = mainFrame
-    
+
+    -- Role Text Box
     local roleBox = Instance.new("TextBox")
     roleBox.Size = UDim2.new(0, 200, 0, 40)
     roleBox.Position = UDim2.new(0, 230, 0, 120)
-    roleBox.PlaceholderText = "#AFK or #AFK2"
+    roleBox.PlaceholderText = "Enter role here!"
     roleBox.Font = Enum.Font.Arcade
     roleBox.TextSize = 18
     roleBox.TextColor3 = Color3.new(1, 1, 1)
@@ -95,45 +97,68 @@ return function()
     roleBox.BorderSizePixel = 0
     roleBox.Parent = mainFrame
     
-    -- Title
-    local titleLabel = Instance.new("TextLabel")
-    titleLabel.Size = UDim2.new(1, 0, 0, 40)
-    titleLabel.Position = UDim2.new(0, 0, 0, 0)
-    titleLabel.Text = "Lebron James Endurance Script"
-    titleLabel.Font = Enum.Font.Arcade
-    titleLabel.TextSize = 24
-    titleLabel.TextColor3 = Color3.new(1, 1, 1)
-    titleLabel.BackgroundTransparency = 1
-    titleLabel.Parent = mainFrame
+    -- Title Bar Container
+    local titleBar = Instance.new("Frame")
+    titleBar.Size = UDim2.new(1, 0, 0, 40)
+    titleBar.BackgroundTransparency = 1
+    titleBar.Parent = mainFrame
     
-    -- Minimize Button
+    -- Minimise Button (create first so we can read its size)
     local minimizeButton = Instance.new("TextButton")
-    minimizeButton.Size = UDim2.new(0, 40, 0, 40)
-    minimizeButton.AnchorPoint = Vector2.new(1, 1)
-    minimizeButton.Position = UDim2.new(1, -5, 1, -5)
+    minimizeButton.Size = UDim2.new(0, 40, 0, 40) -- change width here if needed
+    minimizeButton.AnchorPoint = Vector2.new(1, 0)
+    minimizeButton.Position = UDim2.new(1, -5, 0, 0) -- 5px padding from right
     minimizeButton.Text = "-"
     minimizeButton.Font = Enum.Font.Arcade
     minimizeButton.TextSize = 24
     minimizeButton.TextColor3 = Color3.new(1, 1, 1)
     minimizeButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
     minimizeButton.BorderSizePixel = 0
-    minimizeButton.Parent = mainFrame
+    minimizeButton.Parent = titleBar
     
+    -- Title Label (auto‑calculate safe zone)
+    local padding = 10 -- space between text and button
+    local safeZone = minimizeButton.Size.X.Offset + padding
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(1, -safeZone, 1, 0)
+    titleLabel.Position = UDim2.new(0, 0, 0, 0)
+    titleLabel.Text = "LeBron James Endurance Script"
+    titleLabel.Font = Enum.Font.Arcade
+    titleLabel.TextSize = 24
+    titleLabel.TextColor3 = Color3.new(1, 1, 1)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Center
+    titleLabel.Parent = titleBar
+    
+    -- Minimise / Maximise Logic
     local minimized = false
     local guiElements = { soloButton, onOffButton, usernameBox, roleBox }
     local originalSize = mainFrame.Size
     local originalPos = mainFrame.Position
+    local titleBarHeight = titleBar.Size.Y.Offset
     
     minimizeButton.MouseButton1Click:Connect(function()
         minimized = not minimized
+    
+        -- Hide or show content elements
         for _, element in ipairs(guiElements) do
             element.Visible = not minimized
         end
+    
+        -- Change button symbol
         minimizeButton.Text = minimized and "+" or "-"
+    
         if minimized then
-            mainFrame.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, 50)
-            mainFrame.Position = UDim2.new(originalPos.X.Scale, originalPos.X.Offset, originalPos.Y.Scale, originalPos.Y.Offset + (originalSize.Y.Offset - 50)/2)
+            -- Collapse to just the title bar + small padding
+            mainFrame.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, titleBarHeight + 10)
+            mainFrame.Position = UDim2.new(
+                originalPos.X.Scale,
+                originalPos.X.Offset,
+                originalPos.Y.Scale,
+                originalPos.Y.Offset + (originalSize.Y.Offset - (titleBarHeight + 10)) / 2
+            )
         else
+            -- Restore original size and position
             mainFrame.Size = originalSize
             mainFrame.Position = originalPos
         end
@@ -152,44 +177,53 @@ return function()
         [2] = { name = "PLAYER 2: MAIN", teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
         [3] = { name = "SOLO MODE", teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.5 }
     }
-    
-    -- Win detection
-    local winDetected = { [1] = false, [2] = false }
-    local SoundEvent = ReplicatedStorage:WaitForChild("Sound")
-    
-    SoundEvent.OnClientEvent:Connect(function(action, data, playerName)
-        if action == "Play" and data and data.Name == "Win" then
-            if playerName == "Player1" then
-                winDetected[1] = true
-                print("Player 1 win detected")
-            elseif playerName == "Player2" then
-                winDetected[2] = true
-                print("Player 2 win detected")
-            end
-        end
-    end)
-    
+
+    -- Win detect logic
     local function listenForWin(role)
+        if role == 3 then return end -- skip SOLO mode entirely
+    
+        local won = false
         local connection
-        connection = SoundEvent.OnClientEvent:Connect(function(action, data, playerName)
+    
+        connection = SoundEvent.OnClientEvent:Connect(function(action, data)
             if activeRole ~= role then return end
-            if action == "Play" and data and data.Name == "Win" and playerName == player.Name then
-                print("Local win signal for role " .. role)
-                winDetected[role] = true
+            if action == "Play" and data and data.Name == "Win" then
+                won = true
+                print("✅ Win event received for local client in role", role)
                 connection:Disconnect()
-                if role == 1 and winDetected[2] and not winDetected[1] then
+    
+                if role == 2 then
+                    -- Player 2 should NOT win! restart after 12s
+                    print("⚠️ Player 2 won. 😡 Restarting after 12s!")
                     activeRole = nil
-                    task.wait(17)
-                    activeRole = 1
-                    runLoop(1)
-                elseif role == 2 and winDetected[1] and not winDetected[2] then
-                    activeRole = nil
-                    task.wait(13)
+                    waitSeconds(12) -- changed from 15 to 12
                     activeRole = 2
                     runLoop(2)
                 end
             end
         end)
+    
+        if role == 1 then
+            -- Player 1 must win, if not, restart after 15s
+            task.spawn(function()
+                local startTime = os.clock()
+                while os.clock() - startTime < 15 do 
+                    if won or activeRole ~= role then
+                        return -- either won or role changed
+                    end
+                    RunService.Heartbeat:Wait()
+                end
+    
+                if not won and activeRole == role then
+                    print("⚠️ Player 1 did not win. 😡 Restarting after 15s!")
+                    connection:Disconnect()
+                    activeRole = nil
+                    waitSeconds(15)
+                    activeRole = 1
+                    runLoop(1)
+                end
+            end)
+        end
     end
     
     -- Main loop
@@ -272,7 +306,7 @@ return function()
                 while activeRole == 1 do
                     local targetPlayer = Players:FindFirstChild(usernameBox.Text)
                     if not targetPlayer and os.clock() - checkStart >= 10 then
-                        print("Player 2 missing — switching to SOLO")
+                        print("Player 2 cannot be found in the server! Switching to solo mode now..🧍")
                         activeRole = nil
                         task.wait(1)
                         activeRole = 3
