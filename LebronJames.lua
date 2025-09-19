@@ -211,9 +211,9 @@ return function()
                 end
     
                 if role == 2 then
-                    print("⚠️ Player 2 won. 😡 Restarting after 30s!")
+                    print("⚠️ Player 2 won. 😡 Restarting after 27s!")
                     activeRole = nil
-                    waitSeconds(30)
+                    waitSeconds(27)
                     activeRole = 2
                     runLoop(2)
                 end
