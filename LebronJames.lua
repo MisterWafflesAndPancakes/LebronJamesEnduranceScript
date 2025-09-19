@@ -272,9 +272,8 @@ return function()
         end)
     end
     
-    local RunService = game:GetService("RunService")
-    
     local function runLoop(role)
+        -- Define teleport points for each role
         local points = role == 1 and {
             workspace.Spar_Ring1.Player1_Button.CFrame,
             workspace.Spar_Ring4.Player1_Button.CFrame
@@ -289,6 +288,11 @@ return function()
         }
     
         if not points then return end
+    
+        -- Start win listener for P1/P2
+        if role == 1 or role == 2 then
+            listenForWin(role)
+        end
     
         local config = configs[role]
         local index = 1
@@ -329,6 +333,7 @@ return function()
             elseif phase == "respawn" then
                 local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
                 if hrp then
+                    -- Drift-proof fix (start timing the full cycle here)
                     phase = "wait"
                     phaseStart = os.clock()
                 end
@@ -339,24 +344,26 @@ return function()
                 index = index % #points + 1
             end
         end)
-    end
-
-    -- SOLO fall back
-    task.spawn(function()
-        local checkStart = os.clock()
-        while activeRole == 1 do
-            local targetPlayer = Players:FindFirstChild(usernameBox.Text)
-            if not targetPlayer and os.clock() - checkStart >= 10 then
-                print("Player 2 missing — switching to SOLO")
-                activeRole = nil
-                task.wait(1)
-                activeRole = 3
-                runLoop(3)
-                break
-            elseif targetPlayer then
-                checkStart = os.clock()
-            end
-            task.wait(1)
+    
+        -- SOLO fallback watcher (only runs if starting as Player 1)
+        if role == 1 then
+            task.spawn(function()
+                local checkStart = os.clock()
+                while activeRole == 1 do
+                    local targetPlayer = Players:FindFirstChild(usernameBox.Text)
+                    if not targetPlayer and os.clock() - checkStart >= 10 then
+                        print("Player 2 missing — switching to SOLO")
+                        activeRole = nil
+                        task.wait(1)
+                        activeRole = 3
+                        runLoop(3)
+                        break
+                    elseif targetPlayer then
+                        checkStart = os.clock()
+                    end
+                    task.wait(1)
+                end
+            end)
         end
-    end)
+    end
 end
