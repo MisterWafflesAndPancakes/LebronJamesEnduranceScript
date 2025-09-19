@@ -6,6 +6,22 @@ return function()
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local player = Players.LocalPlayer
     
+    -- State and helpers
+    local activeRole
+    local activeConnection
+    
+    -- Drift-proof wait helper
+    local function waitSeconds(seconds)
+        local start = os.clock()
+        repeat RunService.Heartbeat:Wait() until os.clock() - start >= seconds
+    end
+    
+    -- RemoteEvent reference (listen-only)
+    local SoundEvent = ReplicatedStorage:WaitForChild("Sound", 5)
+    if not SoundEvent then
+        warn("❌ 'Sound' RemoteEvent not found in ReplicatedStorage — win detection disabled.")
+    end
+    
     -- GUI Setup
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "RoleToggleGui"
@@ -72,7 +88,7 @@ return function()
     -- GUI Elements
     local soloButton = createButton("SOLO MODE", UDim2.new(0, 20, 0, 60))
     local onOffButton = createButton("OFF", UDim2.new(0, 230, 0, 60))
-
+    
     -- Username Text Box 
     local usernameBox = Instance.new("TextBox")
     usernameBox.Size = UDim2.new(0, 200, 0, 40)
@@ -84,7 +100,7 @@ return function()
     usernameBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     usernameBox.BorderSizePixel = 0
     usernameBox.Parent = mainFrame
-
+    
     -- Role Text Box
     local roleBox = Instance.new("TextBox")
     roleBox.Size = UDim2.new(0, 200, 0, 40)
@@ -103,11 +119,11 @@ return function()
     titleBar.BackgroundTransparency = 1
     titleBar.Parent = mainFrame
     
-    -- Minimise Button (create first so we can read its size)
+    -- Minimise Button
     local minimizeButton = Instance.new("TextButton")
-    minimizeButton.Size = UDim2.new(0, 40, 0, 40) -- change width here if needed
+    minimizeButton.Size = UDim2.new(0, 40, 0, 40)
     minimizeButton.AnchorPoint = Vector2.new(1, 0)
-    minimizeButton.Position = UDim2.new(1, -5, 0, 0) -- 5px padding from right
+    minimizeButton.Position = UDim2.new(1, -5, 0, 0)
     minimizeButton.Text = "-"
     minimizeButton.Font = Enum.Font.Arcade
     minimizeButton.TextSize = 24
@@ -117,7 +133,7 @@ return function()
     minimizeButton.Parent = titleBar
     
     -- Title Label (auto‑calculate safe zone)
-    local padding = 10 -- space between text and button
+    local padding = 10
     local safeZone = minimizeButton.Size.X.Offset + padding
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Size = UDim2.new(1, -safeZone, 1, 0)
@@ -139,17 +155,11 @@ return function()
     
     minimizeButton.MouseButton1Click:Connect(function()
         minimized = not minimized
-    
-        -- Hide or show content elements
         for _, element in ipairs(guiElements) do
             element.Visible = not minimized
         end
-    
-        -- Change button symbol
         minimizeButton.Text = minimized and "+" or "-"
-    
         if minimized then
-            -- Collapse to just the title bar + small padding
             mainFrame.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, titleBarHeight + 10)
             mainFrame.Position = UDim2.new(
                 originalPos.X.Scale,
@@ -158,7 +168,6 @@ return function()
                 originalPos.Y.Offset + (originalSize.Y.Offset - (titleBarHeight + 10)) / 2
             )
         else
-            -- Restore original size and position
             mainFrame.Size = originalSize
             mainFrame.Position = originalPos
         end
@@ -169,6 +178,10 @@ return function()
         activeRole = nil
         onOffButton.Text = "OFF"
         onOffButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+        if activeConnection and activeConnection.Connected then
+            activeConnection:Disconnect()
+            activeConnection = nil
+        end
     end
     
     -- Configs
@@ -177,26 +190,30 @@ return function()
         [2] = { name = "PLAYER 2: MAIN", teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
         [3] = { name = "SOLO MODE", teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.5 }
     }
-
+    
     -- Win detect logic
     local function listenForWin(role)
-        if role == 3 then return end -- skip SOLO mode entirely
+        if role == 3 or not SoundEvent then return end
     
         local won = false
-        local connection
+        if activeConnection and activeConnection.Connected then
+            activeConnection:Disconnect()
+        end
     
-        connection = SoundEvent.OnClientEvent:Connect(function(action, data)
+        activeConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
             if activeRole ~= role then return end
             if action == "Play" and data and data.Name == "Win" then
                 won = true
                 print("✅ Win event received for local client in role", role)
-                connection:Disconnect()
+                if activeConnection and activeConnection.Connected then
+                    activeConnection:Disconnect()
+                    activeConnection = nil
+                end
     
                 if role == 2 then
-                    -- Player 2 should NOT win! restart after 12s
                     print("⚠️ Player 2 won. 😡 Restarting after 12s!")
                     activeRole = nil
-                    waitSeconds(12) -- changed from 15 to 12
+                    waitSeconds(12)
                     activeRole = 2
                     runLoop(2)
                 end
@@ -207,16 +224,19 @@ return function()
             -- Player 1 must win, if not, restart after 15s
             task.spawn(function()
                 local startTime = os.clock()
-                while os.clock() - startTime < 15 do 
+                while os.clock() - startTime < 15 do
                     if won or activeRole ~= role then
-                        return -- either won or role changed
+                        return
                     end
                     RunService.Heartbeat:Wait()
                 end
     
                 if not won and activeRole == role then
                     print("⚠️ Player 1 did not win. 😡 Restarting after 15s!")
-                    connection:Disconnect()
+                    if activeConnection and activeConnection.Connected then
+                        activeConnection:Disconnect()
+                        activeConnection = nil
+                    end
                     activeRole = nil
                     waitSeconds(15)
                     activeRole = 1
@@ -228,18 +248,25 @@ return function()
     
     -- Main loop
     function runLoop(role)
-        local points = role == 1 and {
-            workspace.Spar_Ring1.Player1_Button.CFrame,
-            workspace.Spar_Ring4.Player1_Button.CFrame
-        } or role == 2 and {
-            workspace.Spar_Ring1.Player2_Button.CFrame,
-            workspace.Spar_Ring4.Player2_Button.CFrame
-        } or role == 3 and {
-            workspace.Spar_Ring2.Player1_Button.CFrame,
-            workspace.Spar_Ring2.Player2_Button.CFrame,
-            workspace.Spar_Ring4.Player1_Button.CFrame,
-            workspace.Spar_Ring4.Player2_Button.CFrame
-        }
+        local points
+        if role == 1 then
+            points = {
+                workspace:FindFirstChild("Spar_Ring1") and workspace.Spar_Ring1:FindFirstChild("Player1_Button") and workspace.Spar_Ring1.Player1_Button.CFrame,
+                workspace:FindFirstChild("Spar_Ring4") and workspace.Spar_Ring4:FindFirstChild("Player1_Button") and workspace.Spar_Ring4.Player1_Button.CFrame
+            }
+        elseif role == 2 then
+            points = {
+                workspace:FindFirstChild("Spar_Ring1") and workspace.Spar_Ring1:FindFirstChild("Player2_Button") and workspace.Spar_Ring1.Player2_Button.CFrame,
+                workspace:FindFirstChild("Spar_Ring4") and workspace.Spar_Ring4:FindFirstChild("Player2_Button") and workspace.Spar_Ring4.Player2_Button.CFrame
+            }
+        elseif role == 3 then
+            points = {
+                workspace:FindFirstChild("Spar_Ring2") and workspace.Spar_Ring2:FindFirstChild("Player1_Button") and workspace.Spar_Ring2.Player1_Button.CFrame,
+                workspace:FindFirstChild("Spar_Ring2") and workspace.Spar_Ring2:FindFirstChild("Player2_Button") and workspace.Spar_Ring2.Player2_Button.CFrame,
+                workspace:FindFirstChild("Spar_Ring4") and workspace.Spar_Ring4:FindFirstChild("Player1_Button") and workspace.Spar_Ring4.Player1_Button.CFrame,
+                workspace:FindFirstChild("Spar_Ring4") and workspace.Spar_Ring4:FindFirstChild("Player2_Button") and workspace.Spar_Ring4.Player2_Button.CFrame
+            }
+        end
     
         if not points then return end
     
@@ -269,7 +296,7 @@ return function()
     
                 local char = player.Character or player.CharacterAdded:Wait()
                 local hrp = char:FindFirstChild("HumanoidRootPart")
-                if hrp then
+                if hrp and points[index] then
                     hrp.CFrame = points[index]
                 end
     
@@ -287,7 +314,6 @@ return function()
             elseif phase == "respawn" then
                 local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
                 if hrp then
-                    -- Drift-proof fix (start timing the full cycle here)
                     phase = "wait"
                     phaseStart = os.clock()
                 end
@@ -308,14 +334,14 @@ return function()
                     if not targetPlayer and os.clock() - checkStart >= 10 then
                         print("Player 2 cannot be found in the server! Switching to solo mode now..🧍")
                         activeRole = nil
-                        task.wait(1)
+                        waitSeconds(1)
                         activeRole = 3
                         runLoop(3)
                         break
                     elseif targetPlayer then
                         checkStart = os.clock()
                     end
-                    task.wait(1)
+                    waitSeconds(1)
                 end
             end)
         end
@@ -359,7 +385,7 @@ return function()
     -- SOLO Button Logic
     soloButton.MouseButton1Click:Connect(function()
         forceToggleOff()
-        task.wait(1)
+        waitSeconds(1)
         activeRole = 3
         onOffButton.Text = "SOLO"
         onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
