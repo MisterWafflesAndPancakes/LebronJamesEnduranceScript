@@ -188,7 +188,7 @@ return function()
     local configs = {
         [1] = { name = "PLAYER 1: DUMMY", teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
         [2] = { name = "PLAYER 2: MAIN", teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
-        [3] = { name = "SOLO MODE", teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.5 }
+        [3] = { name = "SOLO MODE", teleportDelay = 0.3, deathDelay = 0.1, cycleDelay = 5.6 }
     }
     
     -- Win detect logic
@@ -211,9 +211,9 @@ return function()
                 end
     
                 if role == 2 then
-                    print("⚠️ Player 2 won. 😡 Restarting after 12s!")
+                    print("⚠️ Player 2 won. 😡 Restarting after 30s!")
                     activeRole = nil
-                    waitSeconds(12)
+                    waitSeconds(30)
                     activeRole = 2
                     runLoop(2)
                 end
