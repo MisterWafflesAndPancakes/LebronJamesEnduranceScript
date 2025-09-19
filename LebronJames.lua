@@ -218,9 +218,9 @@ return function()
         },
         [3] = {
             name = "SOLO MODE",
-            teleportDelay = 0.5,
-            deathDelay = 0.1,
-            cycleDelay = 0.1
+            teleportDelay = 0.4,
+            deathDelay = 0.6,
+            cycleDelay = 0.2
         }
     }
     
