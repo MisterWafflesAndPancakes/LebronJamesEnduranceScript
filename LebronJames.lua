@@ -69,13 +69,13 @@ return function()
         return button
     end
     
-    -- GUI Elements (cleaned)
+    -- GUI Elements
     local soloButton = createButton("SOLO MODE", UDim2.new(0, 20, 0, 60))
     local onOffButton = createButton("OFF", UDim2.new(0, 230, 0, 60))
     
     local usernameBox = Instance.new("TextBox")
-    usernameBox.Size = UDim2.new(0, 200, 0, 40) -- match button height
-    usernameBox.Position = UDim2.new(0, 20, 0, 120) -- bigger gap
+    usernameBox.Size = UDim2.new(0, 200, 0, 40)
+    usernameBox.Position = UDim2.new(0, 20, 0, 120)
     usernameBox.PlaceholderText = "Target Username"
     usernameBox.Font = Enum.Font.Arcade
     usernameBox.TextSize = 18
@@ -85,8 +85,8 @@ return function()
     usernameBox.Parent = mainFrame
     
     local roleBox = Instance.new("TextBox")
-    roleBox.Size = UDim2.new(0, 200, 0, 40) -- match button height
-    roleBox.Position = UDim2.new(0, 230, 0, 120) -- bigger gap
+    roleBox.Size = UDim2.new(0, 200, 0, 40)
+    roleBox.Position = UDim2.new(0, 230, 0, 120)
     roleBox.PlaceholderText = "#AFK or #AFK2"
     roleBox.Font = Enum.Font.Arcade
     roleBox.TextSize = 18
@@ -95,7 +95,7 @@ return function()
     roleBox.BorderSizePixel = 0
     roleBox.Parent = mainFrame
     
-    -- 🏷 GUI Title
+    -- Title
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Size = UDim2.new(1, 0, 0, 40)
     titleLabel.Position = UDim2.new(0, 0, 0, 0)
@@ -106,11 +106,11 @@ return function()
     titleLabel.BackgroundTransparency = 1
     titleLabel.Parent = mainFrame
     
-    -- Minimize Button (bottom-right corner)
+    -- Minimize Button
     local minimizeButton = Instance.new("TextButton")
     minimizeButton.Size = UDim2.new(0, 40, 0, 40)
-    minimizeButton.AnchorPoint = Vector2.new(1, 1) -- anchor to bottom-right
-    minimizeButton.Position = UDim2.new(1, -5, 1, -5) -- 5px padding from edges
+    minimizeButton.AnchorPoint = Vector2.new(1, 1)
+    minimizeButton.Position = UDim2.new(1, -5, 1, -5)
     minimizeButton.Text = "-"
     minimizeButton.Font = Enum.Font.Arcade
     minimizeButton.TextSize = 24
@@ -119,28 +119,17 @@ return function()
     minimizeButton.BorderSizePixel = 0
     minimizeButton.Parent = mainFrame
     
-    -- Elements to hide when minimized
     local minimized = false
-    local guiElements = {
-        soloButton,
-        onOffButton,
-        usernameBox,
-        roleBox
-    }
-    
-    -- store the original frame size so we can restore it later
+    local guiElements = { soloButton, onOffButton, usernameBox, roleBox }
     local originalSize = mainFrame.Size
     local originalPos = mainFrame.Position
     
     minimizeButton.MouseButton1Click:Connect(function()
         minimized = not minimized
-    
         for _, element in ipairs(guiElements) do
             element.Visible = not minimized
         end
-    
         minimizeButton.Text = minimized and "+" or "-"
-    
         if minimized then
             mainFrame.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, 50)
             mainFrame.Position = UDim2.new(originalPos.X.Scale, originalPos.X.Offset, originalPos.Y.Scale, originalPos.Y.Offset + (originalSize.Y.Offset - 50)/2)
@@ -150,90 +139,24 @@ return function()
         end
     end)
     
-    -- Role Toggle Reset
+    -- Force OFF
     local function forceToggleOff()
         activeRole = nil
         onOffButton.Text = "OFF"
         onOffButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
     end
     
-    -- Role Validation and Assignment
-    local function validateAndAssignRole()
-        local targetName = usernameBox.Text
-        local roleCommand = roleBox.Text
-        local targetPlayer = Players:FindFirstChild(targetName)
-    
-        if not targetPlayer or (roleCommand ~= "#AFK" and roleCommand ~= "#AFK2") then
-            print("Validation failed")
-            task.delay(3, function()
-                forceToggleOff()
-            end)
-            return
-        end
-    
-        if roleCommand == "#AFK" then
-            activeRole = 1
-        elseif roleCommand == "#AFK2" then
-            activeRole = 2
-        end
-    
-        print("Assigned role:", activeRole)
-        onOffButton.Text = "ON"
-        onOffButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
-        runLoop(activeRole)
-    end
-    
-    -- ON/OFF Button Logic
-    onOffButton.MouseButton1Click:Connect(function()
-        if activeRole then
-            forceToggleOff()
-        else
-            validateAndAssignRole()
-        end
-    end)
-    
-    -- SOLO Button Logic
-    soloButton.MouseButton1Click:Connect(function()
-        forceToggleOff()
-        task.wait(1)
-        activeRole = 3
-        onOffButton.Text = "SOLO"
-        onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
-        runLoop(3)
-    end)
-    
-    -- ⚙ Role Configurations
+    -- Configs
     local configs = {
-        [1] = {
-            name = "PLAYER 1: DUMMY",
-            teleportDelay = 0.3,
-            deathDelay = 0.5,
-            cycleDelay = 5.8
-        },
-        [2] = {
-            name = "PLAYER 2: MAIN",
-            teleportDelay = 0.3,
-            deathDelay = 0.5,
-            cycleDelay = 5.8
-        },
-        [3] = {
-            name = "SOLO MODE",
-            teleportDelay = 0.3,
-            deathDelay = 0.5,
-            cycleDelay = 5.5
-        }
+        [1] = { name = "PLAYER 1: DUMMY", teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
+        [2] = { name = "PLAYER 2: MAIN", teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
+        [3] = { name = "SOLO MODE", teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.5 }
     }
     
-    -- Track win detection state for each role
-    local winDetected = {
-        [1] = false,
-        [2] = false
-    }
-    
-    -- RemoteEvent for win detection
+    -- Win detection
+    local winDetected = { [1] = false, [2] = false }
     local SoundEvent = ReplicatedStorage:WaitForChild("Sound")
     
-    -- Listen for any player's win (updates winDetected for both roles)
     SoundEvent.OnClientEvent:Connect(function(action, data, playerName)
         if action == "Play" and data and data.Name == "Win" then
             if playerName == "Player1" then
@@ -246,7 +169,6 @@ return function()
         end
     end)
     
-    -- Role-specific listener for the local role
     local function listenForWin(role)
         local connection
         connection = SoundEvent.OnClientEvent:Connect(function(action, data, playerName)
@@ -255,8 +177,6 @@ return function()
                 print("Local win signal for role " .. role)
                 winDetected[role] = true
                 connection:Disconnect()
-    
-                -- Restart logic based on other role's win state
                 if role == 1 and winDetected[2] and not winDetected[1] then
                     activeRole = nil
                     task.wait(17)
@@ -272,8 +192,8 @@ return function()
         end)
     end
     
-    local function runLoop(role)
-        -- Define teleport points for each role
+    -- Main loop
+    function runLoop(role)
         local points = role == 1 and {
             workspace.Spar_Ring1.Player1_Button.CFrame,
             workspace.Spar_Ring4.Player1_Button.CFrame
@@ -282,7 +202,7 @@ return function()
             workspace.Spar_Ring4.Player2_Button.CFrame
         } or role == 3 and {
             workspace.Spar_Ring2.Player1_Button.CFrame,
-            workspace.Spar_Ring2.Player2_Button.CFrame,
+            workspace.Spar_Ring2.Player1_Button.CFrame,
             workspace.Spar_Ring4.Player1_Button.CFrame,
             workspace.Spar_Ring4.Player2_Button.CFrame
         }
@@ -366,4 +286,49 @@ return function()
             end)
         end
     end
+    
+    -- Role Validation and Assignment
+    local function validateAndAssignRole()
+        local targetName = usernameBox.Text
+        local roleCommand = roleBox.Text
+        local targetPlayer = Players:FindFirstChild(targetName)
+    
+        if not targetPlayer or (roleCommand ~= "#AFK" and roleCommand ~= "#AFK2") then
+            print("Validation failed")
+            task.delay(3, function()
+                forceToggleOff()
+            end)
+            return
+        end
+    
+        if roleCommand == "#AFK" then
+            activeRole = 1
+        elseif roleCommand == "#AFK2" then
+            activeRole = 2
+        end
+    
+        print("Assigned role:", activeRole)
+        onOffButton.Text = "ON"
+        onOffButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+        runLoop(activeRole)
+    end
+    
+    -- ON/OFF Button Logic
+    onOffButton.MouseButton1Click:Connect(function()
+        if activeRole then
+            forceToggleOff()
+        else
+            validateAndAssignRole()
+        end
+    end)
+    
+    -- SOLO Button Logic
+    soloButton.MouseButton1Click:Connect(function()
+        forceToggleOff()
+        task.wait(1)
+        activeRole = 3
+        onOffButton.Text = "SOLO"
+        onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+        runLoop(3)
+    end)
 end
