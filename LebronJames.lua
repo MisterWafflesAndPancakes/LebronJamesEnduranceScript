@@ -202,7 +202,7 @@ return function()
             workspace.Spar_Ring4.Player2_Button.CFrame
         } or role == 3 and {
             workspace.Spar_Ring2.Player1_Button.CFrame,
-            workspace.Spar_Ring2.Player1_Button.CFrame,
+            workspace.Spar_Ring2.Player2_Button.CFrame,
             workspace.Spar_Ring4.Player1_Button.CFrame,
             workspace.Spar_Ring4.Player2_Button.CFrame
         }
