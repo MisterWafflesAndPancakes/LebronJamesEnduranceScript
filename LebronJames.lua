@@ -204,16 +204,16 @@ return function()
             if activeRole ~= role then return end
             if action == "Play" and data and data.Name == "Win" then
                 won = true
-                print("✅ Win event received for local client in role", role)
+                print("✅ Win event received for local client within role", role)
                 if activeConnection and activeConnection.Connected then
                     activeConnection:Disconnect()
                     activeConnection = nil
                 end
     
                 if role == 2 then
-                    print("⚠️ Player 2 won. 😡 Restarting after 27s!")
+                    print("⚠️ Player 2 won. 😡 Restarting after 22s!")
                     activeRole = nil
-                    waitSeconds(27)
+                    waitSeconds(22)
                     activeRole = 2
                     runLoop(2)
                 end
@@ -232,13 +232,13 @@ return function()
                 end
     
                 if not won and activeRole == role then
-                    print("⚠️ Player 1 did not win. 😡 Restarting after 15s!")
+                    print("⚠️ Player 1 did not win within 15s! 😡 Restarting after 10s!")
                     if activeConnection and activeConnection.Connected then
                         activeConnection:Disconnect()
                         activeConnection = nil
                     end
                     activeRole = nil
-                    waitSeconds(15)
+                    waitSeconds(10)
                     activeRole = 1
                     runLoop(1)
                 end
@@ -387,7 +387,7 @@ return function()
         forceToggleOff()
         waitSeconds(1)
         activeRole = 3
-        onOffButton.Text = "SOLO"
+        onOffButton.Text = "Solo Mode: ON"
         onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
         runLoop(3)
     end)
