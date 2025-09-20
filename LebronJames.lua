@@ -19,7 +19,7 @@ return function()
     -- RemoteEvent reference (listen-only)
     local SoundEvent = ReplicatedStorage:WaitForChild("Sound", 5)
     if not SoundEvent then
-        warn("❌ 'Sound' RemoteEvent not found in ReplicatedStorage — win detection disabled.")
+        warn("❌ 'Sound' RemoteEvent not found in ReplicatedStorage, win detection disabled.")
     end
     
     -- GUI Setup
