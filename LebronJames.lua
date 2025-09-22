@@ -10,6 +10,7 @@ return function()
 	local activeRole
 	local loopConnection   -- Heartbeat loop connection
 	local winConnection    -- Win detection connection
+	local isActive = false
 	
 	-- Drift-proof wait helper
 	local function waitSeconds(seconds)
@@ -177,9 +178,10 @@ return function()
 	    end
 	end)
 	
-	-- Force OFF
+
 	local function forceToggleOff()
 	    activeRole = nil
+	    isActive = false
 	    onOffButton.Text = "OFF"
 	    onOffButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
 	
@@ -193,7 +195,7 @@ return function()
 	        winConnection = nil
 	    end
 	
-	    print("Loop stopped")
+	    print("Script stopped")
 	end
 	
 	-- Configs
@@ -202,6 +204,40 @@ return function()
 	    [2] = { name = "PLAYER 2: MAIN", teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
 	    [3] = { name = "SOLO MODE", teleportDelay = 0.15, deathDelay = 0.05, cycleDelay = 5.55 }
 	}
+
+	-- Central restart manager
+	local function restartRole(role, delay)
+	    -- Clean stop
+	    if loopConnection and loopConnection.Connected then
+	        loopConnection:Disconnect()
+	        loopConnection = nil
+	    end
+	    if winConnection and winConnection.Connected then
+	        winConnection:Disconnect()
+	        winConnection = nil
+	    end
+	    activeRole = nil
+	
+	    -- Drift-proof wait
+	    task.spawn(function()
+	        local start = os.clock()
+	        repeat RunService.Heartbeat:Wait() until os.clock() - start >= delay
+	
+	        -- Only restart if still ON
+	        if isActive and activeRole == nil then
+	            activeRole = role
+	            print("🔄 Restarting as Player", role)
+	            runLoop(role)
+	
+	            -- Re‑arm win detection after 0.5s buffer
+	            local bufStart = os.clock()
+	            repeat RunService.Heartbeat:Wait() until os.clock() - bufStart >= 0.5
+	            if isActive and activeRole == role then
+	                listenForWin(role)
+	            end
+	        end
+	    end)
+	end
 	
 	-- Win detection
 	local function listenForWin(role)
@@ -215,7 +251,7 @@ return function()
 	        winConnection = nil
 	    end
 	
-	     -- Attach listener
+	    -- Attach listener
 	    winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
 	        if activeRole ~= role then return end
 	        if action == "Play" and data and data.Name == "Win" then
@@ -230,13 +266,19 @@ return function()
 	            if role == 1 then
 	                -- Player 1 win = expected, just continue
 	                print("🎉 Player 1 won. Continuing as normal...")
+	                -- Re‑arm listener after 0.5s buffer
+	                task.spawn(function()
+	                    local bufStart = os.clock()
+	                    repeat RunService.Heartbeat:Wait() until os.clock() - bufStart >= 0.5
+	                    if isActive and activeRole == 1 then
+	                        listenForWin(1)
+	                    end
+	                end)
+	
 	            elseif role == 2 then
-	                -- Player 2 win = restart after 7.5s
+	                -- Player 2 win = restart once after 22s
 	                print("⚠️ Player 2 won. Restarting after 22s!")
-	                activeRole = nil
-	                waitSeconds(22)
-	                activeRole = 2
-	                runLoop(2)
+	                restartRole(2, 22)
 	            end
 	        end
 	    end)
@@ -252,24 +294,19 @@ return function()
 	                RunService.Heartbeat:Wait()
 	            end
 	
-	            -- If no win within 15s, restart after 10s
+	            -- If no win within 15s, restart once after 9s
 	            if not won and activeRole == role then
-	                print("⚠️ Player 1 did not win within 15s! Restarting after 10s!")
-	                if winConnection and winConnection.Connected then
-	                    winConnection:Disconnect()
-	                    winConnection = nil
-	                end
-	                activeRole = nil
-	                waitSeconds(10)
-	                activeRole = 1
-	                runLoop(1)
+	                print("⚠️ Player 1 did not win within 15s! Restarting after 9s!")
+	                restartRole(1, 9)
 	            end
 	        end)
 	    end
 	end
-
-	--Main loop
+	
+	-- Core loop
 	function runLoop(role)
+	    if not isActive then return end
+	
 	    local points
 	    if role == 1 then
 	        points = {
@@ -289,7 +326,6 @@ return function()
 	            workspace.Spar_Ring3.Player2_Button.CFrame
 	        }
 	    end
-	
 	    if not points then return end
 	
 	    -- Start win listener for P1/P2
@@ -301,13 +337,6 @@ return function()
 	    local index = 1
 	    local phase = "teleport"
 	    local phaseStart = os.clock()
-	    local cycleCount = 0
-	
-	    -- Helper to advance phases cleanly
-	    local function advancePhase(nextPhase)
-	        phase = nextPhase
-	        phaseStart = os.clock()
-	    end
 	
 	    -- Disconnect any old loop before starting a new one
 	    if loopConnection and loopConnection.Connected then
@@ -315,9 +344,8 @@ return function()
 	        loopConnection = nil
 	    end
 	
-	    -- Store the loop connection globally so forceToggleOff() can stop it
 	    loopConnection = RunService.Heartbeat:Connect(function()
-	        if activeRole ~= role then
+	        if activeRole ~= role or not isActive then
 	            loopConnection:Disconnect()
 	            loopConnection = nil
 	            return
@@ -327,17 +355,20 @@ return function()
 	        local elapsed = now - phaseStart
 	
 	        if phase == "teleport" and elapsed >= config.teleportDelay then
-	            advancePhase("kill")
+	            phase = "kill"
+	            phaseStart = now
 	
 	            local char = player.Character
-	            if not char then return end
-	            local hrp = char:FindFirstChild("HumanoidRootPart")
-	            if hrp and points[index] then
-	                hrp.CFrame = points[index]
+	            if char then
+	                local hrp = char:FindFirstChild("HumanoidRootPart")
+	                if hrp and points[index] then
+	                    hrp.CFrame = points[index]
+	                end
 	            end
 	
 	        elseif phase == "kill" and elapsed >= config.deathDelay then
-	            advancePhase("respawn")
+	            phase = "respawn"
+	            phaseStart = now
 	
 	            local char = player.Character
 	            if char then
@@ -349,13 +380,13 @@ return function()
 	        elseif phase == "respawn" then
 	            local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	            if hrp then
-	                -- Drift-proof fix: only start wait timer once respawn is confirmed
-	                advancePhase("wait")
+	                phase = "wait"
+	                phaseStart = os.clock() -- drift‑proof reset
 	            end
 	
 	        elseif phase == "wait" and elapsed >= config.cycleDelay then
-	            cycleCount += 1
-	            advancePhase("teleport")
+	            phase = "teleport"
+	            phaseStart = os.clock()
 	            index = index % #points + 1
 	        end
 	    end)
@@ -364,14 +395,11 @@ return function()
 	    if role == 1 then
 	        task.spawn(function()
 	            local checkStart = os.clock()
-	            while activeRole == 1 do
+	            while activeRole == 1 and isActive do
 	                local targetPlayer = Players:FindFirstChild(usernameBox.Text)
 	                if not targetPlayer and os.clock() - checkStart >= 10 then
-	                    print("Player 2 cannot be found in the server! Switching to solo mode now..🧍")
-	                    activeRole = nil
-	                    waitSeconds(1)
-	                    activeRole = 3
-	                    runLoop(3)
+	                    print("Player 2 cannot be found! Switching to solo mode 🧍")
+	                    restartRole(3, 1) -- use restart manager to switch cleanly
 	                    return
 	                elseif targetPlayer then
 	                    checkStart = os.clock()
@@ -388,15 +416,15 @@ return function()
 	    local roleCommand = roleBox.Text
 	    local targetPlayer = Players:FindFirstChild(targetName)
 	
-	    if not targetPlayer or (roleCommand ~= "#AFK" and roleCommand ~= "#AFK2") then
-	        print("Validation failed")
-	        onOffButton.Text = "Validation failed"
-	        onOffButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-	        task.delay(3, function()
-	            forceToggleOff()
-	        end)
-	        return
-	    end
+	if not targetPlayer or (roleCommand ~= "#AFK" and roleCommand ~= "#AFK2") then
+	    print("Validation failed")
+	    onOffButton.Text = "Validation failed"
+	    onOffButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+	    task.delay(3, function()
+	        forceToggleOff()
+	    end)
+	    return
+	end
 	
 	    if roleCommand == "#AFK" then
 	        activeRole = 1
@@ -404,7 +432,7 @@ return function()
 	        activeRole = 2
 	    end
 	
-	    print("Assigned role:", activeRole)
+	    isActive = true  -- mark script as ON
 	    onOffButton.Text = "ON"
 	    onOffButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
 	    runLoop(activeRole)
@@ -426,6 +454,7 @@ return function()
 	    forceToggleOff()
 	    waitSeconds(1)
 	    activeRole = 3
+	    isActive = true  -- mark script as ON
 	    onOffButton.Text = "SOLO mode: ON"
 	    onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
 	    runLoop(3)
