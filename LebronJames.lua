@@ -11,6 +11,10 @@ return function()
 	local loopConnection   -- Heartbeat loop connection
 	local winConnection    -- Win detection connection
 	local isActive = false
+	local restartRole
+	local listenForWin
+	local runLoop
+
 	
 	-- Drift-proof wait helper
 	local function waitSeconds(seconds)
@@ -297,7 +301,7 @@ return function()
 	            -- If no win within 15s, restart once after 9s
 	            if not won and activeRole == role then
 	                print("⚠️ Player 1 did not win within 15s! Restarting after 9s!")
-	                restartRole(1, 9)
+	                restartRole(1, 24)
 	            end
 	        end)
 	    end
@@ -398,7 +402,7 @@ return function()
 	            while activeRole == 1 and isActive do
 	                local targetPlayer = Players:FindFirstChild(usernameBox.Text)
 	                if not targetPlayer and os.clock() - checkStart >= 10 then
-	                    print("Player 2 cannot be found! Switching to solo mode 🧍")
+	                    print("Player 2 cannot be found! Switching to solo mode now... 🧍")
 	                    restartRole(3, 1) -- use restart manager to switch cleanly
 	                    return
 	                elseif targetPlayer then
