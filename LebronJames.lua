@@ -275,8 +275,8 @@ return function()
         elseif role == 3 then
             points = {
 	        workspace.Spar_Ring2.Player1_Button.CFrame,
-	        workspace.Spar_Ring2.Player2_Button.CFrame.
-	        workspace.Spar_Ring3.Player1_Button.CFrame
+	        workspace.Spar_Ring2.Player2_Button.CFrame,
+	        workspace.Spar_Ring3.Player1_Button.CFrame,
 	        workspace.Spar_Ring3.Player2_Button.CFrame
             }
         end
