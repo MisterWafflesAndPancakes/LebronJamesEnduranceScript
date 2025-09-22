@@ -36,33 +36,36 @@ return function()
     mainFrame.BackgroundTransparency = 0.3
     mainFrame.BorderSizePixel = 0
     mainFrame.Parent = screenGui
-    
-    -- Make GUI Universally Draggable
+
+    -- Make GUI Universally Draggable (improved, no connection leaks)
     local function makeDraggable(gui)
         local dragging = false
         local dragStart, startPos
     
         gui.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or
-               input.UserInputType == Enum.UserInputType.Touch then
+            if input.UserInputType == Enum.UserInputType.MouseButton1 
+            or input.UserInputType == Enum.UserInputType.Touch then
                 dragging = true
                 dragStart = input.Position
                 startPos = gui.Position
+            end
+        end)
     
-                input.Changed:Connect(function()
-                    if input.UserInputState == Enum.UserInputState.End then
-                        dragging = false
-                    end
-                end)
+        gui.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 
+            or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
             end
         end)
     
         UserInputService.InputChanged:Connect(function(input)
-            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or
-                             input.UserInputType == Enum.UserInputType.Touch) then
+            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement 
+            or input.UserInputType == Enum.UserInputType.Touch) then
                 local delta = input.Position - dragStart
-                gui.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
-                                         startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+                gui.Position = UDim2.new(
+                    startPos.X.Scale, startPos.X.Offset + delta.X,
+                    startPos.Y.Scale, startPos.Y.Offset + delta.Y
+                )
             end
         end)
     end
@@ -188,30 +191,39 @@ return function()
     local configs = {
         [1] = { name = "PLAYER 1: DUMMY", teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
         [2] = { name = "PLAYER 2: MAIN", teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
-        [3] = { name = "SOLO MODE", teleportDelay = 0.3, deathDelay = 0.1, cycleDelay = 5.6 }
+        [3] = { name = "SOLO MODE", teleportDelay = 0.15, deathDelay = 0.05, cycleDelay = 5.55 }
     }
-    
-    -- Win detect logic
+
+    --Win detection (pls work now)
     local function listenForWin(role)
         if role == 3 or not SoundEvent then return end
     
         local won = false
+    
+        -- Disconnect any previous listener
         if activeConnection and activeConnection.Connected then
             activeConnection:Disconnect()
+            activeConnection = nil
         end
     
+        -- Attach listener
         activeConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
             if activeRole ~= role then return end
             if action == "Play" and data and data.Name == "Win" then
                 won = true
-                print("✅ Win event received for local client within role", role)
+                print("✅ Win event received for role", role)
+    
                 if activeConnection and activeConnection.Connected then
                     activeConnection:Disconnect()
                     activeConnection = nil
                 end
     
-                if role == 2 then
-                    print("⚠️ Player 2 won. 😡 Restarting after 22s!")
+                if role == 1 then
+                    -- Player 1 win = expected, just continue
+                    print("🎉 Player 1 won. Continuing as normal...")
+                elseif role == 2 then
+                    -- Player 2 win = restart after 7.5s
+                    print("⚠️ Player 2 won. Restarting after 7.5s!")
                     activeRole = nil
                     waitSeconds(22)
                     activeRole = 2
@@ -220,19 +232,20 @@ return function()
             end
         end)
     
+        -- Timeout logic for Player 1 only
         if role == 1 then
-            -- Player 1 must win, if not, restart after 15s
             task.spawn(function()
                 local startTime = os.clock()
                 while os.clock() - startTime < 15 do
                     if won or activeRole ~= role then
-                        return
+                        return -- exit if win detected or role changed
                     end
                     RunService.Heartbeat:Wait()
                 end
     
+                -- If no win within 15s, restart after 10s
                 if not won and activeRole == role then
-                    print("⚠️ Player 1 did not win within 15s! 😡 Restarting after 10s!")
+                    print("⚠️ Player 1 did not win within 15s! Restarting after 10s!")
                     if activeConnection and activeConnection.Connected then
                         activeConnection:Disconnect()
                         activeConnection = nil
@@ -251,20 +264,20 @@ return function()
         local points
         if role == 1 then
             points = {
-                workspace:FindFirstChild("Spar_Ring1") and workspace.Spar_Ring1:FindFirstChild("Player1_Button") and workspace.Spar_Ring1.Player1_Button.CFrame,
-                workspace:FindFirstChild("Spar_Ring4") and workspace.Spar_Ring4:FindFirstChild("Player1_Button") and workspace.Spar_Ring4.Player1_Button.CFrame
+	        workspace.Spar_Ring1.Player1_Button.CFrame,
+	        workspace.Spar_Ring4.Player1_Button.CFrame
             }
         elseif role == 2 then
             points = {
-                workspace:FindFirstChild("Spar_Ring1") and workspace.Spar_Ring1:FindFirstChild("Player2_Button") and workspace.Spar_Ring1.Player2_Button.CFrame,
-                workspace:FindFirstChild("Spar_Ring4") and workspace.Spar_Ring4:FindFirstChild("Player2_Button") and workspace.Spar_Ring4.Player2_Button.CFrame
+	        workspace.Spar_Ring1.Player2_Button.CFrame,
+	        workspace.Spar_Ring4.Player2_Button.CFrame
             }
         elseif role == 3 then
             points = {
-                workspace:FindFirstChild("Spar_Ring2") and workspace.Spar_Ring2:FindFirstChild("Player1_Button") and workspace.Spar_Ring2.Player1_Button.CFrame,
-                workspace:FindFirstChild("Spar_Ring2") and workspace.Spar_Ring2:FindFirstChild("Player2_Button") and workspace.Spar_Ring2.Player2_Button.CFrame,
-                workspace:FindFirstChild("Spar_Ring4") and workspace.Spar_Ring4:FindFirstChild("Player1_Button") and workspace.Spar_Ring4.Player1_Button.CFrame,
-                workspace:FindFirstChild("Spar_Ring4") and workspace.Spar_Ring4:FindFirstChild("Player2_Button") and workspace.Spar_Ring4.Player2_Button.CFrame
+	        workspace.Spar_Ring2.Player1_Button.CFrame,
+	        workspace.Spar_Ring2.Player2_Button.CFrame.
+	        workspace.Spar_Ring3.Player1_Button.CFrame
+	        workspace.Spar_Ring3.Player2_Button.CFrame
             }
         end
     
@@ -279,6 +292,13 @@ return function()
         local index = 1
         local phase = "teleport"
         local phaseStart = os.clock()
+        local cycleCount = 0
+    
+        -- Helper to advance phases cleanly
+        local function advancePhase(nextPhase)
+            phase = nextPhase
+            phaseStart = os.clock()
+        end
     
         local connection
         connection = RunService.Heartbeat:Connect(function()
@@ -291,18 +311,17 @@ return function()
             local elapsed = now - phaseStart
     
             if phase == "teleport" and elapsed >= config.teleportDelay then
-                phase = "kill"
-                phaseStart = now
+                advancePhase("kill")
     
-                local char = player.Character or player.CharacterAdded:Wait()
+                local char = player.Character
+                if not char then return end
                 local hrp = char:FindFirstChild("HumanoidRootPart")
                 if hrp and points[index] then
                     hrp.CFrame = points[index]
                 end
     
             elseif phase == "kill" and elapsed >= config.deathDelay then
-                phase = "respawn"
-                phaseStart = now
+                advancePhase("respawn")
     
                 local char = player.Character
                 if char then
@@ -314,13 +333,14 @@ return function()
             elseif phase == "respawn" then
                 local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
                 if hrp then
-                    phase = "wait"
-                    phaseStart = os.clock()
+                    -- Drift-proof fix: only start wait timer once respawn is confirmed
+                    advancePhase("wait")
                 end
     
             elseif phase == "wait" and elapsed >= config.cycleDelay then
-                phase = "teleport"
-                phaseStart = os.clock()
+                cycleCount += 1
+                print(("🔁 Cycle %d completed for role %s"):format(cycleCount, role))
+                advancePhase("teleport")
                 index = index % #points + 1
             end
         end)
@@ -337,7 +357,7 @@ return function()
                         waitSeconds(1)
                         activeRole = 3
                         runLoop(3)
-                        break
+                        return
                     elseif targetPlayer then
                         checkStart = os.clock()
                     end
@@ -355,6 +375,8 @@ return function()
     
         if not targetPlayer or (roleCommand ~= "#AFK" and roleCommand ~= "#AFK2") then
             print("Validation failed")
+            onOffButton.Text = "Validation failed"
+            onOffButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
             task.delay(3, function()
                 forceToggleOff()
             end)
@@ -377,6 +399,8 @@ return function()
     onOffButton.MouseButton1Click:Connect(function()
         if activeRole then
             forceToggleOff()
+            usernameBox.Text = ""
+            roleBox.Text = ""
         else
             validateAndAssignRole()
         end
@@ -387,7 +411,7 @@ return function()
         forceToggleOff()
         waitSeconds(1)
         activeRole = 3
-        onOffButton.Text = "Solo Mode: ON"
+        onOffButton.Text = "SOLO mode: ON"
         onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
         runLoop(3)
     end)
