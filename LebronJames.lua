@@ -223,7 +223,99 @@ return function()
 	    [2] = { name = "PLAYER 2: MAIN",  teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
 	    [3] = { name = "SOLO MODE", teleportDelay = 0.15, deathDelay = 0.05, cycleDelay = 5.55 }
 	}
+
+	-- Role validation and assignment
+	local function validateAndAssignRole()
+	    local targetName = usernameBox.Text
+	    local roleCommand = roleBox.Text
+	    local targetPlayer = Players:FindFirstChild(targetName)
 	
+	    if not targetPlayer or (roleCommand ~= "#AFK" and roleCommand ~= "#AFK2") then
+	        print("Validation failed")
+	        onOffButton.Text = "Validation failed"
+	        onOffButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+	        task.delay(3, function()
+	            forceToggleOff()
+	        end)
+	        return
+	    end
+	
+	    if roleCommand == "#AFK" then
+	        activeRole = 1
+	    elseif roleCommand == "#AFK2" then
+	        activeRole = 2
+	    end
+	
+	    -- Reset adaptive state
+	    won = false
+	    timeoutElapsed = false
+	    cycleDurations10[activeRole] = {}
+	    cycleDurations100[activeRole] = {}
+	    lastCycleTime[activeRole] = nil
+	
+	    isActive = true
+	    onOffButton.Text = "ON"
+	    onOffButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+	    runLoop(activeRole)
+	end
+	
+	-- ON/OFF Button Logic (inline, full behavior)
+	onOffButton.MouseButton1Click:Connect(function()
+	    if activeRole then
+	        -- Turning OFF
+	        forceToggleOff()
+	
+	        -- Reset UI fields
+	        usernameBox.Text = ""
+	        roleBox.Text = ""
+	
+	        -- Reset adaptive state
+	        won = false
+	        timeoutElapsed = false
+	        if cycleDurations10[activeRole] then
+	            cycleDurations10[activeRole] = {}
+	            cycleDurations100[activeRole] = {}
+	            lastCycleTime[activeRole] = nil
+	        end
+	
+	        -- Disconnect loop if still running
+	        if loopConnection and loopConnection.Connected then
+	            loopConnection:Disconnect()
+	            loopConnection = nil
+	        end
+	
+	        activeRole = nil
+	        isActive = false
+	        onOffButton.Text = "OFF"
+	        onOffButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+	
+	    else
+	        -- Turning ON
+	        validateAndAssignRole()
+	    end
+	end)
+	
+	-- SOLO Button Logic (inline, with state reset)
+	soloButton.MouseButton1Click:Connect(function()
+	    forceToggleOff()
+	    waitSeconds(1)
+	
+	    activeRole = 3
+	    isActive = true
+	
+	    -- Reset state for solo run
+	    won = false
+	    timeoutElapsed = false
+	    cycleDurations10[3] = {}
+	    cycleDurations100[3] = {}
+	    lastCycleTime[3] = nil
+	
+	    onOffButton.Text = "SOLO mode: ON"
+	    onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+	
+	    runLoop(3)
+	end)
+
 	-- Central restart manager
 	local function restartRole(role, delay)
 	    -- Clean stop
@@ -475,99 +567,4 @@ return function()
 	        end)
 	    end
 	end
-	
-	-- Role validation and assignment
-	local function validateAndAssignRole()
-	    local targetName = usernameBox.Text
-	    local roleCommand = roleBox.Text
-	    local targetPlayer = Players:FindFirstChild(targetName)
-	
-	    if not targetPlayer or (roleCommand ~= "#AFK" and roleCommand ~= "#AFK2") then
-	        print("Validation failed")
-	        onOffButton.Text = "Validation failed"
-	        onOffButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-	        task.delay(3, function()
-	            forceToggleOff()
-	        end)
-	        return
-	    end
-	
-	    if roleCommand == "#AFK" then
-	        activeRole = 1
-	    elseif roleCommand == "#AFK2" then
-	        activeRole = 2
-	    end
-	
-	    -- Reset adaptive state
-	    won = false
-	    timeoutElapsed = false
-	    cycleDurations10[activeRole] = {}
-	    cycleDurations100[activeRole] = {}
-	    lastCycleTime[activeRole] = nil
-	
-	    isActive = true
-	    onOffButton.Text = "ON"
-	    onOffButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
-	    runLoop(activeRole)
-	end
-	
-	-- ON/OFF button handler
-	local function handleOnOffClick()
-	    if activeRole then
-	        -- Turning OFF
-	        forceToggleOff()
-	
-	        -- Reset UI fields
-	        usernameBox.Text = ""
-	        roleBox.Text = ""
-	
-	        -- Reset adaptive state
-	        won = false
-	        timeoutElapsed = false
-	        if cycleDurations10[activeRole] then
-	            cycleDurations10[activeRole] = {}
-	            cycleDurations100[activeRole] = {}
-	            lastCycleTime[activeRole] = nil
-	        end
-	
-	        -- Disconnect loop if still running
-	        if loopConnection and loopConnection.Connected then
-	            loopConnection:Disconnect()
-	            loopConnection = nil
-	        end
-	
-	        activeRole = nil
-	        isActive = false
-	        onOffButton.Text = "OFF"
-	        onOffButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-	
-	    else
-	        -- Turning ON
-	        validateAndAssignRole()
-	    end
-	end
-	
-	-- SOLO button handler
-	local function handleSoloClick()
-	    forceToggleOff()
-	    waitSeconds(1)
-	
-	    activeRole = 3
-	    isActive = true
-	
-	    -- Reset state for solo run
-	    won = false
-	    timeoutElapsed = false
-	    cycleDurations10[3] = {}
-	    cycleDurations100[3] = {}
-	    lastCycleTime[3] = nil
-	
-	    onOffButton.Text = "SOLO mode: ON"
-	    onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
-	    runLoop(3)
-	end
-	
-	-- Hook up the handlers
-	onOffButton.MouseButton1Click:Connect(handleOnOffClick)
-	soloButton.MouseButton1Click:Connect(handleSoloClick)
 end
