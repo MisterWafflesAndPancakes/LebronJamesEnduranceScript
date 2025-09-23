@@ -397,101 +397,106 @@ return function()
 	
 	-- Core loop logic
 	runLoop = function(role)
-		if not isActive then return end
+	    if not isActive then return end
 	
-		local points
-		if role == 1 then
-			points = {
-				workspace.Spar_Ring1.Player1_Button.CFrame,
-				workspace.Spar_Ring4.Player1_Button.CFrame
-			}
-		elseif role == 2 then
-			points = {
-				workspace.Spar_Ring1.Player2_Button.CFrame,
-				workspace.Spar_Ring4.Player2_Button.CFrame
-			}
-		elseif role == 3 then
-			points = {
-				workspace.Spar_Ring2.Player1_Button.CFrame,
-				workspace.Spar_Ring2.Player2_Button.CFrame,
-				workspace.Spar_Ring3.Player1_Button.CFrame,
-				workspace.Spar_Ring3.Player2_Button.CFrame
-			}
-		end
-		if not points then return end
+	    local points
+	    if role == 1 then
+	        points = {
+	            workspace.Spar_Ring1.Player1_Button.CFrame,
+	            workspace.Spar_Ring4.Player1_Button.CFrame
+	        }
+	    elseif role == 2 then
+	        points = {
+	            workspace.Spar_Ring1.Player2_Button.CFrame,
+	            workspace.Spar_Ring4.Player2_Button.CFrame
+	        }
+	    elseif role == 3 then
+	        points = {
+	            workspace.Spar_Ring2.Player1_Button.CFrame,
+	            workspace.Spar_Ring2.Player2_Button.CFrame,
+	            workspace.Spar_Ring3.Player1_Button.CFrame,
+	            workspace.Spar_Ring3.Player2_Button.CFrame
+	        }
+	    end
+	    if not points then return end
 	
-		won, timeoutElapsed = false, false
-		cycleDurations10[role] = {}
-		cycleDurations100[role] = {}
-		lastCycleTime[role] = nil
+	    won, timeoutElapsed = false, false
+	    cycleDurations10[role] = {}
+	    cycleDurations100[role] = {}
+	    lastCycleTime[role] = nil
 	
-		if role == 1 or role == 2 then
-			listenForWin(role)
-		end
+	    if role == 1 or role == 2 then
+	        listenForWin(role)
+	    end
 	
-		local config = configs[role]
-		local index, phase, phaseStart = 1, "teleport", os.clock()
+	    local config = configs[role]
+	    local index, phase, phaseStart = 1, "teleport", os.clock()
 	
-		if loopConnection and loopConnection.Connected then
-			loopConnection:Disconnect()
-			loopConnection = nil
-		end
+	    if loopConnection and loopConnection.Connected then
+	        loopConnection:Disconnect()
+	        loopConnection = nil
+	    end
 	
-		loopConnection = RunService.Heartbeat:Connect(function()
-			if activeRole ~= role or not isActive then
-				loopConnection:Disconnect()
-				loopConnection = nil
-				return
-			end
+	    loopConnection = RunService.Heartbeat:Connect(function()
+	        if activeRole ~= role or not isActive then
+	            loopConnection:Disconnect()
+	            loopConnection = nil
+	            return
+	        end
 	
-			local now, elapsed = os.clock(), os.clock() - phaseStart
+	        local now, elapsed = os.clock(), os.clock() - phaseStart
 	
-			if phase == "teleport" and elapsed >= config.teleportDelay then
-				phase, phaseStart = "kill", now
-				local char = player.Character
-				if char then
-					local hrp = char:FindFirstChild("HumanoidRootPart")
-					if hrp and points[index] then
-						hrp.CFrame = points[index]
-					end
-				end
+	        if phase == "teleport" and elapsed >= config.teleportDelay then
+	            phase, phaseStart = "kill", now
+	            local char = player.Character
+	            if char then
+	                local hrp = char:FindFirstChild("HumanoidRootPart")
+	                if hrp and points[index] then
+	                    hrp.CFrame = points[index]
+	                end
+	            end
 	
-			elseif phase == "kill" and elapsed >= config.deathDelay then
-				phase, phaseStart = "respawn", now
-				local char = player.Character
-				if char then
-					pcall(function() char:BreakJoints() end)
-				end
+	        elseif phase == "kill" and elapsed >= config.deathDelay then
+	            phase, phaseStart = "respawn", now
+	            local char = player.Character
+	            if char then
+	                pcall(function() char:BreakJoints() end)
+	            end
 	
-			elseif phase == "respawn" then
-				local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-				if hrp then
-					phase, phaseStart = "wait", os.clock()
-				end
+	        elseif phase == "respawn" then
+	            local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	            if hrp then
+	                phase, phaseStart = "wait", os.clock()
+	            end
 	
-			elseif phase == "wait" and elapsed >= config.cycleDelay then
-				phase, phaseStart = "teleport", os.clock()
-				index = index % #points + 1
-			end
-		end)
+	        elseif phase == "wait" and elapsed >= config.cycleDelay then
+	            -- ✅ Cycle complete, record it
+	            recordCycle(role)
 	
-		-- Solo fallback logic
-		if role == 1 then
-			task.spawn(function()
-				local checkStart = os.clock()
-				while activeRole == 1 and isActive do
-					local targetPlayer = Players:FindFirstChild(usernameBox.Text)
-					if not targetPlayer and os.clock() - checkStart >= 10 then
-						print("Player 2 cannot be found! Switching to solo mode now... 🧍")
-						restartRole(3, 1)
-						return
-					elseif targetPlayer then
-						checkStart = os.clock()
-					end
-					waitSeconds(1)
-				end
-			end)
-		end
+	            -- Move to next cycle
+	            phase, phaseStart = "teleport", os.clock()
+	            index = index % #points + 1
+	        end
+	    end)
+	
+	    -- Solo fallback logic (unchanged)
+	    if role == 1 then
+	        task.spawn(function()
+	            local checkStart = os.clock()
+	            while activeRole == 1 and isActive do
+	                local targetPlayer = Players:FindFirstChild(usernameBox.Text)
+	                if not targetPlayer and os.clock() - checkStart >= 10 then
+	                    print("Player 2 cannot be found! Switching to solo mode now... 🧍")
+	                    activeRole = nil
+	                    restartRole(3, 1)
+	                    return
+	                elseif targetPlayer then
+	                    checkStart = os.clock()
+	                end
+	                waitSeconds(1)
+	            end
+	        end)
+	    end
 	end
 	
 	-- Role validation and assignment
