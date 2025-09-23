@@ -8,13 +8,21 @@ return function()
 	
 	-- State and helpers
 	local activeRole
-	local loopConnection   -- Heartbeat loop connection
-	local winConnection    -- Win detection connection
+	local loopConnection   
+	local winConnection    
 	local isActive = false
 	local restartRole
 	local listenForWin
 	local runLoop
 
+	-- Adaptive restart state
+	local won = false
+	local timeoutElapsed = false
+	
+	-- Cycle tracking
+	local cycleDurations10 = { [1] = {}, [2] = {} }
+	local cycleDurations100 = { [1] = {}, [2] = {} }
+	local lastCycleTime = { [1] = nil, [2] = nil }
 	
 	-- Drift-proof wait helper
 	local function waitSeconds(seconds)
@@ -199,16 +207,23 @@ return function()
 	        winConnection = nil
 	    end
 	
+	    -- Reset adaptive state
+	    won = false
+	    timeoutElapsed = false
+	    cycleDurations10[1], cycleDurations10[2] = {}, {}
+	    cycleDurations100[1], cycleDurations100[2] = {}, {}
+	    lastCycleTime[1], lastCycleTime[2] = nil, nil
+	
 	    print("Script stopped")
 	end
 	
 	-- Configs
 	local configs = {
 	    [1] = { name = "PLAYER 1: DUMMY", teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
-	    [2] = { name = "PLAYER 2: MAIN", teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
+	    [2] = { name = "PLAYER 2: MAIN",  teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
 	    [3] = { name = "SOLO MODE", teleportDelay = 0.15, deathDelay = 0.05, cycleDelay = 5.55 }
 	}
-
+	
 	-- Central restart manager
 	local function restartRole(role, delay)
 	    -- Clean stop
@@ -243,11 +258,73 @@ return function()
 	    end)
 	end
 	
-	-- Win detection
-	local function listenForWin(role)
-	    if role == 3 or not SoundEvent then return end
+	-- Helpers for cycle tracking
+	local function recordCycle(role)
+	    local now = os.clock()
+	    if lastCycleTime[role] then
+	        local duration = now - lastCycleTime[role]
+	        table.insert(cycleDurations10[role], duration)
+	        if #cycleDurations10[role] > 10 then table.remove(cycleDurations10[role], 1) end
+	        table.insert(cycleDurations100[role], duration)
+	        if #cycleDurations100[role] > 100 then table.remove(cycleDurations100[role], 1) end
+	    end
+	    lastCycleTime[role] = now
+	end
 	
-	    local won = false
+	local function getAverage(tbl)
+	    local sum = 0
+	    for _, d in ipairs(tbl) do sum += d end
+	    return (#tbl > 0) and (sum / #tbl) or nil
+	end
+	
+	local function getCycleAverages(role)
+	    return getAverage(cycleDurations10[role]), getAverage(cycleDurations100[role])
+	end
+	
+	-- Adaptive restart logic
+	local function adaptiveRestart(role, serverTime)
+	    if role ~= 1 and role ~= 2 then return end
+	
+	    local avg10, avg100 = getCycleAverages(role)
+	    local cycleLength = avg10 or avg100 or 6.6
+	    local phase = serverTime % cycleLength
+	    local cyclesToSkip = 2 -- adjust to 3 if you want longer spacing
+	
+	    if role == 2 and won then
+	        -- Player 2: restart at boundary, adjusted -2.5s
+	        local baseDelay = (cyclesToSkip * cycleLength) - phase
+	        if baseDelay < 0 then baseDelay = baseDelay + cycleLength end
+	        local finalDelay = math.max(0, baseDelay - 2.5)
+	
+	        print(("P2 restart in %.2fs (cycle=%.3f, adjusted -2.5s)"):format(finalDelay, cycleLength))
+	        restartRole(2, finalDelay)
+	        recordCycle(2)
+	
+	    elseif role == 1 and timeoutElapsed then
+	        -- Player 1: restart at boundary +2.5s, factoring in 15s already waited
+	        local baseDelay = (cyclesToSkip * cycleLength) - phase + 2.5
+	        if baseDelay < 0 then baseDelay = baseDelay + cycleLength end
+	        local finalDelay = math.max(0, baseDelay - 15)
+	
+	        print(("P1 restart in %.2fs (cycle=%.3f, timeout=15s)"):format(finalDelay, cycleLength))
+	        restartRole(1, finalDelay)
+	        recordCycle(1)
+	    end
+	end
+	
+	-- Hook spar ring events
+	local valueFolder = ReplicatedStorage:WaitForChild("Get_Value_From_Workspace")
+	local function hookRing(ring)
+	    ring.OnClientEvent:Connect(function(serverTime)
+	        adaptiveRestart(activeRole, serverTime)
+	    end)
+	end
+	hookRing(valueFolder:WaitForChild("Get_Time_Spar_Ring1"))
+	hookRing(valueFolder:WaitForChild("Get_Time_Spar_Ring4"))
+	
+	-- Win/timeout detection
+	function listenForWin(role)
+	    if role == 3 or not SoundEvent then return end
 	
 	    -- Disconnect any previous listener
 	    if winConnection and winConnection.Connected then
@@ -255,59 +332,37 @@ return function()
 	        winConnection = nil
 	    end
 	
-	    -- Attach listener
-	    winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
-	        if activeRole ~= role then return end
-	        if action == "Play" and data and data.Name == "Win" then
-	            won = true
-	            print("✅ Win event received for role", role)
-	
-	            if winConnection and winConnection.Connected then
-	                winConnection:Disconnect()
-	                winConnection = nil
-	            end
-	
-	            if role == 1 then
-	                -- Player 1 win = expected, just continue
-	                print("🎉 Player 1 won. Continuing as normal...")
-	                -- Re‑arm listener after 0.5s buffer
-	                task.spawn(function()
-	                    local bufStart = os.clock()
-	                    repeat RunService.Heartbeat:Wait() until os.clock() - bufStart >= 0.5
-	                    if isActive and activeRole == 1 then
-	                        listenForWin(1)
-	                    end
-	                end)
-	
-	            elseif role == 2 then
-	                -- Player 2 win = restart once after 22s
-	                print("⚠️ Player 2 won. Restarting after 22s!")
-	                restartRole(2, 22)
-	            end
-	        end
-	    end)
-	
-	    -- Timeout logic for Player 1 only
 	    if role == 1 then
+	        -- Timeout watcher
 	        task.spawn(function()
 	            local startTime = os.clock()
 	            while os.clock() - startTime < 15 do
-	                if won or activeRole ~= role then
-	                    return -- exit if win detected or role changed
-	                end
+	                if won or activeRole ~= role then return end
 	                RunService.Heartbeat:Wait()
 	            end
-	
-	            -- If no win within 15s, restart once after 9s
 	            if not won and activeRole == role then
-	                print("⚠️ Player 1 did not win within 15s! Restarting after 9s!")
-	                restartRole(1, 24)
+	                timeoutElapsed = true
+	                print("⚠️ Player 1 timed out after 15s, waiting for adaptive restart...")
+	            end
+	        end)
+	
+	    elseif role == 2 then
+	        -- Win detection via SoundEvent
+	        winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
+	            if activeRole ~= 2 then return end
+	            if action == "Play" and data and data.Name == "Win" then
+	                won = true
+	                print("✅ Win event received for Player 2, waiting for adaptive restart...")
+	                if winConnection and winConnection.Connected then
+	                    winConnection:Disconnect()
+	                    winConnection = nil
+	                end
 	            end
 	        end)
 	    end
 	end
-	
-	-- Core loop
+
+	-- Core Loop logic
 	function runLoop(role)
 	    if not isActive then return end
 	
@@ -332,9 +387,16 @@ return function()
 	    end
 	    if not points then return end
 	
+	    -- Reset per‑role state
+	    won = false
+	    timeoutElapsed = false
+	    cycleDurations10[role] = {}
+	    cycleDurations100[role] = {}
+	    lastCycleTime[role] = nil
+	
 	    -- Start win listener for P1/P2
 	    if role == 1 or role == 2 then
-	        listenForWin(role)
+	        listenForWin(role) -- this sets won/timeoutElapsed flags
 	    end
 	
 	    local config = configs[role]
@@ -414,21 +476,20 @@ return function()
 	    end
 	end
 	
-	-- Role Validation and Assignment
 	local function validateAndAssignRole()
 	    local targetName = usernameBox.Text
 	    local roleCommand = roleBox.Text
 	    local targetPlayer = Players:FindFirstChild(targetName)
 	
-	if not targetPlayer or (roleCommand ~= "#AFK" and roleCommand ~= "#AFK2") then
-	    print("Validation failed")
-	    onOffButton.Text = "Validation failed"
-	    onOffButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-	    task.delay(3, function()
-	        forceToggleOff()
-	    end)
-	    return
-	end
+	    if not targetPlayer or (roleCommand ~= "#AFK" and roleCommand ~= "#AFK2") then
+	        print("Validation failed")
+	        onOffButton.Text = "Validation failed"
+	        onOffButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+	        task.delay(3, function()
+	            forceToggleOff()
+	        end)
+	        return
+	    end
 	
 	    if roleCommand == "#AFK" then
 	        activeRole = 1
@@ -436,7 +497,14 @@ return function()
 	        activeRole = 2
 	    end
 	
-	    isActive = true  -- mark script as ON
+	    -- Reset adaptive state
+	    won = false
+	    timeoutElapsed = false
+	    cycleDurations10[activeRole] = {}
+	    cycleDurations100[activeRole] = {}
+	    lastCycleTime[activeRole] = nil
+	
+	    isActive = true
 	    onOffButton.Text = "ON"
 	    onOffButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
 	    runLoop(activeRole)
@@ -445,20 +513,54 @@ return function()
 	-- ON/OFF Button Logic
 	onOffButton.MouseButton1Click:Connect(function()
 	    if activeRole then
+	        -- Turning OFF
 	        forceToggleOff()
+	
+	        -- Reset UI fields
 	        usernameBox.Text = ""
 	        roleBox.Text = ""
+	
+	        -- Reset adaptive state
+	        won = false
+	        timeoutElapsed = false
+	        if cycleDurations10[activeRole] then
+	            cycleDurations10[activeRole] = {}
+	            cycleDurations100[activeRole] = {}
+	            lastCycleTime[activeRole] = nil
+	        end
+	
+	        -- Disconnect loop if still running
+	        if loopConnection and loopConnection.Connected then
+	            loopConnection:Disconnect()
+	            loopConnection = nil
+	        end
+	
+	        activeRole = nil
+	        isActive = false
+	        onOffButton.Text = "OFF"
+	        onOffButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+	
 	    else
+	        -- Turning ON
 	        validateAndAssignRole()
 	    end
 	end)
-	
-	-- SOLO Button Logic
+
+	-- Solo Button logic
 	soloButton.MouseButton1Click:Connect(function()
 	    forceToggleOff()
 	    waitSeconds(1)
+	
 	    activeRole = 3
-	    isActive = true  -- mark script as ON
+	    isActive = true
+	
+	    -- Reset state for solo run
+	    won = false
+	    timeoutElapsed = false
+	    cycleDurations10[3] = {}
+	    cycleDurations100[3] = {}
+	    lastCycleTime[3] = nil
+	
 	    onOffButton.Text = "SOLO mode: ON"
 	    onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
 	    runLoop(3)
