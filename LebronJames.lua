@@ -129,7 +129,65 @@ return function()
 	roleBox.BorderSizePixel = 0
 	roleBox.Parent = mainFrame
 	
-	-- Title Bar + Minimise Button (your existing code here, unchanged)
+	-- Title Bar Container
+	local titleBar = Instance.new("Frame")
+	titleBar.Size = UDim2.new(1, 0, 0, 40)
+	titleBar.BackgroundTransparency = 1
+	titleBar.Parent = mainFrame
+	
+	-- Minimise Button
+	local minimizeButton = Instance.new("TextButton")
+	minimizeButton.Size = UDim2.new(0, 40, 0, 40)
+	minimizeButton.AnchorPoint = Vector2.new(1, 0)
+	minimizeButton.Position = UDim2.new(1, -5, 0, 0)
+	minimizeButton.Text = "-"
+	minimizeButton.Font = Enum.Font.Arcade
+	minimizeButton.TextSize = 24
+	minimizeButton.TextColor3 = Color3.new(1, 1, 1)
+	minimizeButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+	minimizeButton.BorderSizePixel = 0
+	minimizeButton.Parent = titleBar
+	
+	-- Title Label (auto‑calculate safe zone)
+	local padding = 10
+	local safeZone = minimizeButton.Size.X.Offset + padding
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.Size = UDim2.new(1, -safeZone, 1, 0)
+	titleLabel.Position = UDim2.new(0, 0, 0, 0)
+	titleLabel.Text = "LeBron James Endurance Script"
+	titleLabel.Font = Enum.Font.Arcade
+	titleLabel.TextSize = 24
+	titleLabel.TextColor3 = Color3.new(1, 1, 1)
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Center
+	titleLabel.Parent = titleBar
+	
+	-- Minimise / Maximise Logic
+	local minimized = false
+	local guiElements = { soloButton, onOffButton, usernameBox, roleBox }
+	local originalSize = mainFrame.Size
+	local originalPos = mainFrame.Position
+	local titleBarHeight = titleBar.Size.Y.Offset
+	
+	minimizeButton.MouseButton1Click:Connect(function()
+	    minimized = not minimized
+	    for _, element in ipairs(guiElements) do
+	        element.Visible = not minimized
+	    end
+	    minimizeButton.Text = minimized and "+" or "-"
+	    if minimized then
+	        mainFrame.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, titleBarHeight + 10)
+	        mainFrame.Position = UDim2.new(
+	            originalPos.X.Scale,
+	            originalPos.X.Offset,
+	            originalPos.Y.Scale,
+	            originalPos.Y.Offset + (originalSize.Y.Offset - (titleBarHeight + 10)) / 2
+	        )
+	    else
+	        mainFrame.Size = originalSize
+	        mainFrame.Position = originalPos
+	    end
+	end)
 	
 	-- Force toggle off helper
 	local function forceToggleOff()
@@ -151,8 +209,7 @@ return function()
 	    lastCycleTime[1], lastCycleTime[2] = nil, nil
 	    print("Script stopped")
 	end
-	
-	-- Stub connections: always fire, even if handlers not ready yet
+
 	onOffButton.MouseButton1Click:Connect(function()
 	    if handleOnOffClick then
 	        handleOnOffClick()
@@ -175,26 +232,6 @@ return function()
 	    cycleDurations10[1], cycleDurations10[2] = {}, {}
 	    cycleDurations100[1], cycleDurations100[2] = {}, {}
 	    lastCycleTime[1], lastCycleTime[2] = nil, nil
-	
-	    print("Script stopped")
-	end
-
-	-- Stub connections: buttons always fire, even if handlers aren't ready yet
-	onOffButton.MouseButton1Click:Connect(function()
-	    if handleOnOffClick then
-	        handleOnOffClick()
-	    else
-	        print("ON/OFF clicked but handler not ready yet")
-	    end
-	end)
-	
-	soloButton.MouseButton1Click:Connect(function()
-	    if handleSoloClick then
-	        handleSoloClick()
-	    else
-	        print("SOLO clicked but handler not ready yet")
-	    end
-	end)
 	
 	-- Configs
 	local configs = {
