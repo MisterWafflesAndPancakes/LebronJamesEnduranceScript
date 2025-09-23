@@ -476,6 +476,7 @@ return function()
 	    end
 	end
 	
+	-- Role validation and assignment
 	local function validateAndAssignRole()
 	    local targetName = usernameBox.Text
 	    local roleCommand = roleBox.Text
@@ -510,8 +511,8 @@ return function()
 	    runLoop(activeRole)
 	end
 	
-	-- ON/OFF Button Logic
-	onOffButton.MouseButton1Click:Connect(function()
+	-- ON/OFF button handler
+	local function handleOnOffClick()
 	    if activeRole then
 	        -- Turning OFF
 	        forceToggleOff()
@@ -544,10 +545,10 @@ return function()
 	        -- Turning ON
 	        validateAndAssignRole()
 	    end
-	end)
-
-	-- Solo Button logic
-	soloButton.MouseButton1Click:Connect(function()
+	end
+	
+	-- SOLO button handler
+	local function handleSoloClick()
 	    forceToggleOff()
 	    waitSeconds(1)
 	
@@ -564,5 +565,9 @@ return function()
 	    onOffButton.Text = "SOLO mode: ON"
 	    onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
 	    runLoop(3)
-	end)
+	end
+	
+	-- Hook up the handlers
+	onOffButton.MouseButton1Click:Connect(handleOnOffClick)
+	soloButton.MouseButton1Click:Connect(handleSoloClick)
 end
