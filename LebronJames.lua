@@ -14,6 +14,8 @@ return function()
 	local restartRole
 	local listenForWin
 	local runLoop
+	local handleOnOffClick
+	local handleSoloClick
 	
 	-- Adaptive restart state
 	local won = false
@@ -215,6 +217,23 @@ return function()
 	
 	    print("Script stopped")
 	end
+
+	-- Stub connections: buttons always fire, even if handlers aren't ready yet
+	onOffButton.MouseButton1Click:Connect(function()
+	    if handleOnOffClick then
+	        handleOnOffClick()
+	    else
+	        print("ON/OFF clicked but handler not ready yet")
+	    end
+	end)
+	
+	soloButton.MouseButton1Click:Connect(function()
+	    if handleSoloClick then
+	        handleSoloClick()
+	    else
+	        print("SOLO clicked but handler not ready yet")
+	    end
+	end)
 	
 	-- Configs
 	local configs = {
@@ -475,7 +494,7 @@ return function()
 	    end
 	end
 	
-	-- Role validation and assignment
+	-- Role validation and assignment (unchanged)
 	local function validateAndAssignRole()
 	    local targetName = usernameBox.Text
 	    local roleCommand = roleBox.Text
@@ -510,65 +529,45 @@ return function()
 	    runLoop(activeRole)
 	end
 	
-	-- ON/OFF Button Logic
-	onOffButton.MouseButton1Click:Connect(function()
-	    -- Baseline probe to ensure click wiring fires
-	    -- print("ON/OFF clicked")
-	
+	-- Assign handlers (instead of direct connections)
+	handleOnOffClick = function()
 	    if activeRole then
 	        -- Turning OFF
 	        forceToggleOff()
+	        usernameBox.Text, roleBox.Text = "", ""
 	
-	        -- Reset UI fields
-	        usernameBox.Text = ""
-	        roleBox.Text = ""
-	
-	        -- Reset adaptive state
-	        won = false
-	        timeoutElapsed = false
+	        won, timeoutElapsed = false, false
 	        if cycleDurations10[activeRole] then
 	            cycleDurations10[activeRole] = {}
 	            cycleDurations100[activeRole] = {}
 	            lastCycleTime[activeRole] = nil
 	        end
 	
-	        -- Disconnect loop if still running
 	        if loopConnection and loopConnection.Connected then
 	            loopConnection:Disconnect()
 	            loopConnection = nil
 	        end
 	
-	        activeRole = nil
-	        isActive = false
+	        activeRole, isActive = nil, false
 	        onOffButton.Text = "OFF"
 	        onOffButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-	
 	    else
 	        -- Turning ON
-	        -- print("DEBUG: runLoop =", runLoop, "restartRole =", restartRole, "listenForWin =", listenForWin)
 	        validateAndAssignRole()
 	    end
-	end)
+	end
 	
-	-- SOLO Button Logic
-	soloButton.MouseButton1Click:Connect(function()
-	    -- print("SOLO clicked")
+	handleSoloClick = function()
 	    forceToggleOff()
 	    waitSeconds(1)
 	
-	    activeRole = 3
-	    isActive = true
-	
-	    -- Reset state for solo run
-	    won = false
-	    timeoutElapsed = false
-	    cycleDurations10[3] = {}
-	    cycleDurations100[3] = {}
-	    lastCycleTime[3] = nil
+	    activeRole, isActive = 3, true
+	    won, timeoutElapsed = false, false
+	    cycleDurations10[3], cycleDurations100[3], lastCycleTime[3] = {}, {}, nil
 	
 	    onOffButton.Text = "SOLO mode: ON"
 	    onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
 	
 	    runLoop(3)
-	end)
+	end
 end
