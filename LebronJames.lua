@@ -269,10 +269,21 @@ return function()
 	        repeat RunService.Heartbeat:Wait() until os.clock() - start >= delay
 	
 	        if isActive and activeRole == nil then
+	            -- Reset outcome flags each cycle
+	            won = false
+	            timeoutElapsed = false
+	
 	            activeRole = role
 	            print("🔄 Restarting as Player", role)
+	
+	            if role == 1 then
+	                print("🚀 Player 1 loop re‑armed and running again")
+	            elseif role == 2 then
+	                print("🚀 Player 2 loop re‑armed and running again")
+	            end
+	
 	            runLoop(role)
-	            -- runLoop already calls listenForWin for roles 1/2
+	            listenForWin(role) -- re‑arm listeners every cycle
 	        end
 	    end)
 	end
@@ -283,18 +294,14 @@ return function()
 	    if lastCycleTime[role] then
 	        local duration = now - lastCycleTime[role]
 	
-	        -- 1‑cycle buffer (latest only)
 	        cycleDurations1[role] = {duration}
 	
-	        -- 5‑cycle buffer
 	        table.insert(cycleDurations5[role], duration)
 	        if #cycleDurations5[role] > 5 then table.remove(cycleDurations5[role], 1) end
 	
-	        -- 10‑cycle buffer
 	        table.insert(cycleDurations10[role], duration)
 	        if #cycleDurations10[role] > 10 then table.remove(cycleDurations10[role], 1) end
 	
-	        -- 100‑cycle buffer
 	        table.insert(cycleDurations100[role], duration)
 	        if #cycleDurations100[role] > 100 then table.remove(cycleDurations100[role], 1) end
 	    end
@@ -324,7 +331,6 @@ return function()
 	
 	    local avg1, avg5, avg10, avg100 = getCycleAverages(role)
 	
-	    -- Hierarchy: prefer 100 > 10 > 5 > 1
 	    local cycleLength, source
 	    if avg100 then
 	        cycleLength, source = avg100, "avg100"
@@ -402,7 +408,24 @@ return function()
 	    end
 	
 	    if role == 1 then
-	        -- Role 1 (main) uses timeout watchdog
+	        -- Player 1 listens for win event
+	        if SoundEvent:IsA("RemoteEvent") then
+	            winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
+	                if activeRole ~= 1 then return end
+	                if action == "Play" and data and data.Name == "Win" then
+	                    won = true
+	                    print("✅ Win event received for Player 1, waiting for adaptive restart...")
+	                    if winConnection and winConnection.Connected then
+	                        winConnection:Disconnect()
+	                        winConnection = nil
+	                    end
+	                end
+	            end)
+	        else
+	            warn("SoundEvent is not a RemoteEvent; Player 1 win detection unavailable.")
+	        end
+	
+	        -- 15s timeout watchdog fallback
 	        timeoutGen += 1
 	        local myGen = timeoutGen
 	        task.spawn(function()
@@ -418,7 +441,7 @@ return function()
 	        end)
 	
 	    elseif role == 2 then
-	        -- Role 2 (dummy) listens for win event
+	        -- Player 2 listens for win event
 	        if SoundEvent:IsA("RemoteEvent") then
 	            winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
 	                if activeRole ~= 2 then return end
@@ -432,7 +455,7 @@ return function()
 	                end
 	            end)
 	        else
-	            warn("SoundEvent is not a RemoteEvent; win detection unavailable.")
+	            warn("SoundEvent is not a RemoteEvent; Player 2 win detection unavailable.")
 	        end
 	    end
 	end
