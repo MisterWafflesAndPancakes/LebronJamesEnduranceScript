@@ -242,101 +242,108 @@ return function()
 	
 	-- Central restart manager
 	restartRole = function(role, delay)
-		if loopConnection and loopConnection.Connected then
-			loopConnection:Disconnect()
-			loopConnection = nil
-		end
-		if winConnection and winConnection.Connected then
-			winConnection:Disconnect()
-			winConnection = nil
-		end
-		activeRole = nil
+	    if loopConnection and loopConnection.Connected then
+	        loopConnection:Disconnect()
+	        loopConnection = nil
+	    end
+	    if winConnection and winConnection.Connected then
+	        winConnection:Disconnect()
+	        winConnection = nil
+	    end
+	    activeRole = nil
 	
-		task.spawn(function()
-			local start = os.clock()
-			repeat RunService.Heartbeat:Wait() until os.clock() - start >= delay
+	    task.spawn(function()
+	        local start = os.clock()
+	        repeat RunService.Heartbeat:Wait() until os.clock() - start >= delay
 	
-			if isActive and activeRole == nil then
-				activeRole = role
-				print("🔄 Restarting as Player", role)
-				runLoop(role)
-	
-				local bufStart = os.clock()
-				repeat RunService.Heartbeat:Wait() until os.clock() - bufStart >= 0.5
-				if isActive and activeRole == role then
-					listenForWin(role)
-				end
-			end
-		end)
+	        if isActive and activeRole == nil then
+	            activeRole = role
+	            print("🔄 Restarting as Player", role)
+	            runLoop(role)
+	            -- runLoop already calls listenForWin for roles 1/2
+	        end
+	    end)
 	end
 	
 	-- Cycle tracking helpers
 	local function recordCycle(role)
-		local now = os.clock()
-		if lastCycleTime[role] then
-			local duration = now - lastCycleTime[role]
-			table.insert(cycleDurations10[role], duration)
-			if #cycleDurations10[role] > 10 then table.remove(cycleDurations10[role], 1) end
-			table.insert(cycleDurations100[role], duration)
-			if #cycleDurations100[role] > 100 then table.remove(cycleDurations100[role], 1) end
-		end
-		lastCycleTime[role] = now
+	    local now = os.clock()
+	    if lastCycleTime[role] then
+	        local duration = now - lastCycleTime[role]
+	        table.insert(cycleDurations10[role], duration)
+	        if #cycleDurations10[role] > 10 then table.remove(cycleDurations10[role], 1) end
+	        table.insert(cycleDurations100[role], duration)
+	        if #cycleDurations100[role] > 100 then table.remove(cycleDurations100[role], 1) end
+	    end
+	    lastCycleTime[role] = now
 	end
 	
 	local function getAverage(tbl)
-		local sum = 0
-		for _, d in ipairs(tbl) do sum += d end
-		return (#tbl > 0) and (sum / #tbl) or nil
+	    local sum = 0
+	    for _, d in ipairs(tbl) do sum += d end
+	    return (#tbl > 0) and (sum / #tbl) or nil
 	end
 	
 	local function getCycleAverages(role)
-		return getAverage(cycleDurations10[role]), getAverage(cycleDurations100[role])
+	    return getAverage(cycleDurations10[role]), getAverage(cycleDurations100[role])
 	end
 	
 	-- Adaptive restart logic
 	local function adaptiveRestart(role, serverTime)
-		if role ~= 1 and role ~= 2 then return end
+	    if role ~= 1 and role ~= 2 then return end
 	
-		local avg10, avg100 = getCycleAverages(role)
-		local cycleLength = avg10 or avg100 or 6.6
-		local phase = serverTime % cycleLength
-		local cyclesToSkip = 2
+	    local t = tonumber(serverTime)
+	    if not t then return end
 	
-		if role == 2 and won then
-			local baseDelay = (cyclesToSkip * cycleLength) - phase
-			if baseDelay < 0 then baseDelay = baseDelay + cycleLength end
-			local finalDelay = math.max(0, baseDelay - 2.5)
-			print(("P2 restart in %.2fs (cycle=%.3f, adjusted -2.5s)"):format(finalDelay, cycleLength))
-			restartRole(2, finalDelay)
-			recordCycle(2)
+	    local avg10, avg100 = getCycleAverages(role)
+	    local cycleLength = avg10 or avg100 or 6.6
+	    if cycleLength <= 0 then cycleLength = 6.6 end
 	
-		elseif role == 1 and timeoutElapsed then
-			local baseDelay = (cyclesToSkip * cycleLength) - phase + 2.5
-			if baseDelay < 0 then baseDelay = baseDelay + cycleLength end
-			local finalDelay = math.max(0, baseDelay - 15)
-			print(("P1 restart in %.2fs (cycle=%.3f, timeout=15s)"):format(finalDelay, cycleLength))
-			restartRole(1, finalDelay)
-			recordCycle(1)
-		end
+	    local phase = t % cycleLength
+	    local cyclesToSkip = 2
+	
+	    if role == 2 and won then
+	        local baseDelay = (cyclesToSkip * cycleLength) - phase
+	        if baseDelay < 0 then baseDelay = baseDelay + cycleLength end
+	        local finalDelay = math.max(0, baseDelay - 2.5)
+	        print(("P2 restart in %.2fs (cycle=%.3f, adjusted -2.5s)"):format(finalDelay, cycleLength))
+	        restartRole(2, finalDelay)
+	        recordCycle(2)
+	
+	    elseif role == 1 and timeoutElapsed then
+	        local baseDelay = (cyclesToSkip * cycleLength) - phase + 2.5
+	        if baseDelay < 0 then baseDelay = baseDelay + cycleLength end
+	        local finalDelay = math.max(0, baseDelay - 15)
+	        print(("P1 restart in %.2fs (cycle=%.3f, timeout=15s)"):format(finalDelay, cycleLength))
+	        restartRole(1, finalDelay)
+	        recordCycle(1)
+	    end
 	end
 	
-	-- Hook sparring ring values (RemoteFunctions, so we poll instead of listen)
+	-- Persistent pollers (RemoteFunctions)
 	local valueFolder = ReplicatedStorage:WaitForChild("Get_Value_From_Workspace")
 	
 	local function pollRing(ring)
 	    task.spawn(function()
 	        local lastVal
-	        while isActive do
-	            local ok, serverTime = pcall(function()
-	                return ring:InvokeServer()
-	            end)
-	            if ok and serverTime and serverTime ~= lastVal then
-	                adaptiveRestart(activeRole, serverTime)
-	                lastVal = serverTime
-	            elseif not ok then
-	                warn("Polling failed for", ring.Name, serverTime)
+	        while true do
+	            if isActive and (activeRole == 1 or activeRole == 2) then
+	                local ok, serverTime = pcall(function()
+	                    return ring:InvokeServer()
+	                end)
+	                if ok then
+	                    local t = tonumber(serverTime)
+	                    if t and t ~= lastVal then
+	                        adaptiveRestart(activeRole, t)
+	                        lastVal = t
+	                    end
+	                else
+	                    warn("Polling failed for", ring.Name, serverTime)
+	                end
+	            else
+	                lastVal = nil
 	            end
-	            task.wait(1) -- adjust interval as needed
+	            RunService.Heartbeat:Wait()
 	        end
 	    end)
 	end
@@ -344,41 +351,48 @@ return function()
 	pollRing(valueFolder:WaitForChild("Get_Time_Spar_Ring1"))
 	pollRing(valueFolder:WaitForChild("Get_Time_Spar_Ring4"))
 	
-	-- Win/timeout detection
+	-- Win/timeout detection with debouncing
+	local timeoutGen = 0
 	listenForWin = function(role)
-		if role == 3 or not SoundEvent then return end
+	    if role == 3 or not SoundEvent then return end
 	
-		if winConnection and winConnection.Connected then
-			winConnection:Disconnect()
-			winConnection = nil
-		end
+	    if winConnection and winConnection.Connected then
+	        winConnection:Disconnect()
+	        winConnection = nil
+	    end
 	
-		if role == 1 then
-			task.spawn(function()
-				local startTime = os.clock()
-				while os.clock() - startTime < 15 do
-					if won or activeRole ~= role then return end
-					RunService.Heartbeat:Wait()
-				end
-				if not won and activeRole == role then
-					timeoutElapsed = true
-					print("⚠️ Player 1 timed out after 15s, waiting for adaptive restart...")
-				end
-			end)
+	    if role == 1 then
+	        timeoutGen += 1
+	        local myGen = timeoutGen
+	        task.spawn(function()
+	            local startTime = os.clock()
+	            while os.clock() - startTime < 15 do
+	                if won or activeRole ~= role or myGen ~= timeoutGen then return end
+	                RunService.Heartbeat:Wait()
+	            end
+	            if not won and activeRole == role and myGen == timeoutGen then
+	                timeoutElapsed = true
+	                print("⚠️ Player 1 timed out after 15s, waiting for adaptive restart...")
+	            end
+	        end)
 	
-		elseif role == 2 then
-			winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
-				if activeRole ~= 2 then return end
-				if action == "Play" and data and data.Name == "Win" then
-					won = true
-					print("✅ Win event received for Player 2, waiting for adaptive restart...")
-					if winConnection and winConnection.Connected then
-						winConnection:Disconnect()
-						winConnection = nil
-					end
-				end
-			end)
-		end
+	    elseif role == 2 then
+	        if SoundEvent:IsA("RemoteEvent") then
+	            winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
+	                if activeRole ~= 2 then return end
+	                if action == "Play" and data and data.Name == "Win" then
+	                    won = true
+	                    print("✅ Win event received for Player 2, waiting for adaptive restart...")
+	                    if winConnection and winConnection.Connected then
+	                        winConnection:Disconnect()
+	                        winConnection = nil
+	                    end
+	                end
+	            end)
+	        else
+	            warn("SoundEvent is not a RemoteEvent; win detection unavailable.")
+	        end
+	    end
 	end
 	
 	-- Core loop logic
