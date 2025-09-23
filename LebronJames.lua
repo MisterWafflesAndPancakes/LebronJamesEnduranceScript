@@ -223,9 +223,9 @@ return function()
 	    [2] = { name = "PLAYER 2: MAIN",  teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
 	    [3] = { name = "SOLO MODE", teleportDelay = 0.15, deathDelay = 0.05, cycleDelay = 5.55 }
 	}
-
+	
 	-- Central restart manager
-	local function restartRole(role, delay)
+	restartRole = function(role, delay)
 	    -- Clean stop
 	    if loopConnection and loopConnection.Connected then
 	        loopConnection:Disconnect()
@@ -323,7 +323,7 @@ return function()
 	hookRing(valueFolder:WaitForChild("Get_Time_Spar_Ring4"))
 	
 	-- Win/timeout detection
-	function listenForWin(role)
+	listenForWin = function(role)
 	    if role == 3 or not SoundEvent then return end
 	
 	    -- Disconnect any previous listener
@@ -362,8 +362,8 @@ return function()
 	    end
 	end
 
-	-- Core Loop logic
-	function runLoop(role)
+	-- Core loop logic
+	runLoop = function(role)
 	    if not isActive then return end
 	
 	    local points
@@ -396,7 +396,7 @@ return function()
 	
 	    -- Start win listener for P1/P2
 	    if role == 1 or role == 2 then
-	        listenForWin(role) -- this sets won/timeoutElapsed flags
+	        listenForWin(role)
 	    end
 	
 	    local config = configs[role]
@@ -457,7 +457,7 @@ return function()
 	        end
 	    end)
 	
-	    -- SOLO fallback watcher (only runs if starting as Player 1)
+	    -- SOLO fallback watcher (Only runs if starting as Player 1)
 	    if role == 1 then
 	        task.spawn(function()
 	            local checkStart = os.clock()
@@ -465,7 +465,7 @@ return function()
 	                local targetPlayer = Players:FindFirstChild(usernameBox.Text)
 	                if not targetPlayer and os.clock() - checkStart >= 10 then
 	                    print("Player 2 cannot be found! Switching to solo mode now... 🧍")
-	                    restartRole(3, 1) -- use restart manager to switch cleanly
+	                    restartRole(3, 1)
 	                    return
 	                elseif targetPlayer then
 	                    checkStart = os.clock()
@@ -475,8 +475,8 @@ return function()
 	        end)
 	    end
 	end
-
-		-- Role validation and assignment
+	
+	-- Role validation and assignment
 	local function validateAndAssignRole()
 	    local targetName = usernameBox.Text
 	    local roleCommand = roleBox.Text
