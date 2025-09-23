@@ -24,9 +24,12 @@ return function()
 	local timeoutElapsed = false
 	
 	-- Cycle tracking
-	local cycleDurations10 = { [1] = {}, [2] = {} }
+	local cycleDurations1   = { [1] = {}, [2] = {} }
+	local cycleDurations5   = { [1] = {}, [2] = {} }
+	local cycleDurations10  = { [1] = {}, [2] = {} }
 	local cycleDurations100 = { [1] = {}, [2] = {} }
-	local lastCycleTime = { [1] = nil, [2] = nil }
+	
+	local lastCycleTime     = { [1] = nil, [2] = nil }
 	
 	-- Drift-proof wait helper
 	local function waitSeconds(seconds)
@@ -191,47 +194,56 @@ return function()
 	
 	-- Force toggle off helper
 	local function forceToggleOff()
-		activeRole = nil
-		isActive = false
-		onOffButton.Text = "OFF"
-		onOffButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
-		if loopConnection and loopConnection.Connected then
-			loopConnection:Disconnect()
-			loopConnection = nil
-		end
-		if winConnection and winConnection.Connected then
-			winConnection:Disconnect()
-			winConnection = nil
-		end
-		won, timeoutElapsed = false, false
-		cycleDurations10[1], cycleDurations10[2] = {}, {}
-		cycleDurations100[1], cycleDurations100[2] = {}, {}
-		lastCycleTime[1], lastCycleTime[2] = nil, nil
-		print("Script stopped")
+	    activeRole = nil
+	    isActive = false
+	    onOffButton.Text = "OFF"
+	    onOffButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+	
+	    if loopConnection and loopConnection.Connected then
+	        loopConnection:Disconnect()
+	        loopConnection = nil
+	    end
+	    if winConnection and winConnection.Connected then
+	        winConnection:Disconnect()
+	        winConnection = nil
+	    end
+	
+	    -- Reset adaptive state
+	    won, timeoutElapsed = false, false
+	    cycleDurations1[1], cycleDurations1[2]     = {}, {}
+	    cycleDurations5[1], cycleDurations5[2]     = {}, {}
+	    cycleDurations10[1], cycleDurations10[2]   = {}, {}
+	    cycleDurations100[1], cycleDurations100[2] = {}, {}
+	    lastCycleTime[1], lastCycleTime[2] = nil, nil
+	
+	    print("Script stopped")
 	end
 	
+	-- Button connections
 	onOffButton.MouseButton1Click:Connect(function()
-		if handleOnOffClick then
-			handleOnOffClick()
-		else
-			print("ON/OFF clicked but handler not ready yet")
-		end
+	    if handleOnOffClick then
+	        handleOnOffClick()
+	    else
+	        print("ON/OFF clicked but handler not ready yet")
+	    end
 	end)
 	
 	soloButton.MouseButton1Click:Connect(function()
-		if handleSoloClick then
-			handleSoloClick()
-		else
-			print("SOLO clicked but handler not ready yet")
-		end
+	    if handleSoloClick then
+	        handleSoloClick()
+	    else
+	        print("SOLO clicked but handler not ready yet")
+	    end
 	end)
 	
-		-- Reset adaptive state
-		won = false
-		timeoutElapsed = false
-		cycleDurations10[1], cycleDurations10[2] = {}, {}
-		cycleDurations100[1], cycleDurations100[2] = {}, {}
-		lastCycleTime[1], lastCycleTime[2] = nil, nil
+	-- Reset adaptive state (global reset)
+	won = false
+	timeoutElapsed = false
+	cycleDurations1[1], cycleDurations1[2]     = {}, {}
+	cycleDurations5[1], cycleDurations5[2]     = {}, {}
+	cycleDurations10[1], cycleDurations10[2]   = {}, {}
+	cycleDurations100[1], cycleDurations100[2] = {}, {}
+	lastCycleTime[1], lastCycleTime[2] = nil, nil
 	
 	-- Configs
 	local configs = {
@@ -270,8 +282,19 @@ return function()
 	    local now = os.clock()
 	    if lastCycleTime[role] then
 	        local duration = now - lastCycleTime[role]
+	
+	        -- 1‑cycle buffer (latest only)
+	        cycleDurations1[role] = {duration}
+	
+	        -- 5‑cycle buffer
+	        table.insert(cycleDurations5[role], duration)
+	        if #cycleDurations5[role] > 5 then table.remove(cycleDurations5[role], 1) end
+	
+	        -- 10‑cycle buffer
 	        table.insert(cycleDurations10[role], duration)
 	        if #cycleDurations10[role] > 10 then table.remove(cycleDurations10[role], 1) end
+	
+	        -- 100‑cycle buffer
 	        table.insert(cycleDurations100[role], duration)
 	        if #cycleDurations100[role] > 100 then table.remove(cycleDurations100[role], 1) end
 	    end
@@ -285,38 +308,55 @@ return function()
 	end
 	
 	local function getCycleAverages(role)
-	    return getAverage(cycleDurations10[role]), getAverage(cycleDurations100[role])
+	    local avg1   = getAverage(cycleDurations1[role])
+	    local avg5   = getAverage(cycleDurations5[role])
+	    local avg10  = getAverage(cycleDurations10[role])
+	    local avg100 = getAverage(cycleDurations100[role])
+	    return avg1, avg5, avg10, avg100
 	end
 	
-	-- Adaptive restart logic
+	-- Adaptive restart logic with hierarchy
 	local function adaptiveRestart(role, serverTime)
 	    if role ~= 1 and role ~= 2 then return end
 	
 	    local t = tonumber(serverTime)
 	    if not t then return end
 	
-	    local avg10, avg100 = getCycleAverages(role)
-	    local cycleLength = avg10 or avg100 or 6.6
-	    if cycleLength <= 0 then cycleLength = 6.6 end
+	    local avg1, avg5, avg10, avg100 = getCycleAverages(role)
+	
+	    -- Hierarchy: prefer 100 > 10 > 5 > 1
+	    local cycleLength, source
+	    if avg100 then
+	        cycleLength, source = avg100, "avg100"
+	    elseif avg10 then
+	        cycleLength, source = avg10, "avg10"
+	    elseif avg5 then
+	        cycleLength, source = avg5, "avg5"
+	    elseif avg1 then
+	        cycleLength, source = avg1, "avg1"
+	    else
+	        print("⏸️ Skipping adaptive restart — no cycle data yet")
+	        return
+	    end
 	
 	    local phase = t % cycleLength
 	    local cyclesToSkip = 2
 	
-	    if role == 2 and won then
+	    if role == 1 and won then
 	        local baseDelay = (cyclesToSkip * cycleLength) - phase
 	        if baseDelay < 0 then baseDelay = baseDelay + cycleLength end
 	        local finalDelay = math.max(0, baseDelay - 2.5)
-	        print(("P2 restart in %.2fs (cycle=%.3f, adjusted -2.5s)"):format(finalDelay, cycleLength))
-	        restartRole(2, finalDelay)
-	        recordCycle(2)
+	        print(("P1 restart in %.2fs (cycle=%.3f, source=%s)"):format(finalDelay, cycleLength, source))
+	        restartRole(1, finalDelay)
+	        recordCycle(1)
 	
-	    elseif role == 1 and timeoutElapsed then
+	    elseif role == 2 and timeoutElapsed then
 	        local baseDelay = (cyclesToSkip * cycleLength) - phase + 2.5
 	        if baseDelay < 0 then baseDelay = baseDelay + cycleLength end
 	        local finalDelay = math.max(0, baseDelay - 15)
-	        print(("P1 restart in %.2fs (cycle=%.3f, timeout=15s)"):format(finalDelay, cycleLength))
-	        restartRole(1, finalDelay)
-	        recordCycle(1)
+	        print(("P2 restart in %.2fs (cycle=%.3f, source=%s)"):format(finalDelay, cycleLength, source))
+	        restartRole(2, finalDelay)
+	        recordCycle(2)
 	    end
 	end
 	
@@ -362,6 +402,7 @@ return function()
 	    end
 	
 	    if role == 1 then
+	        -- Role 1 (main) uses timeout watchdog
 	        timeoutGen += 1
 	        local myGen = timeoutGen
 	        task.spawn(function()
@@ -377,6 +418,7 @@ return function()
 	        end)
 	
 	    elseif role == 2 then
+	        -- Role 2 (dummy) listens for win event
 	        if SoundEvent:IsA("RemoteEvent") then
 	            winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
 	                if activeRole ~= 2 then return end
@@ -501,68 +543,81 @@ return function()
 	
 	-- Role validation and assignment
 	local function validateAndAssignRole()
-		local targetName = usernameBox.Text
-		local roleCommand = roleBox.Text
-		local targetPlayer = Players:FindFirstChild(targetName)
+	    local targetName = usernameBox.Text
+	    local roleCommand = roleBox.Text
+	    local targetPlayer = Players:FindFirstChild(targetName)
 	
-		if not targetPlayer or (roleCommand ~= "#AFK" and roleCommand ~= "#AFK2") then
-			print("Validation failed")
-			onOffButton.Text = "Validation failed"
-			onOffButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-			task.delay(3, function() forceToggleOff() end)
-			return
-		end
+	    if not targetPlayer or (roleCommand ~= "#AFK" and roleCommand ~= "#AFK2") then
+	        print("Validation failed")
+	        onOffButton.Text = "Validation failed"
+	        onOffButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+	        task.delay(3, function() forceToggleOff() end)
+	        return
+	    end
 	
-		if roleCommand == "#AFK" then
-			activeRole = 1
-		elseif roleCommand == "#AFK2" then
-			activeRole = 2
-		end
+	    if roleCommand == "#AFK" then
+	        activeRole = 1
+	    elseif roleCommand == "#AFK2" then
+	        activeRole = 2
+	    end
 	
-		won, timeoutElapsed = false, false
-		cycleDurations10[activeRole] = {}
-		cycleDurations100[activeRole] = {}
-		lastCycleTime[activeRole] = nil
+	    -- Reset flags and cycle buffers
+	    won, timeoutElapsed = false, false
+	    cycleDurations1[activeRole]   = {}
+	    cycleDurations5[activeRole]   = {}
+	    cycleDurations10[activeRole]  = {}
+	    cycleDurations100[activeRole] = {}
+	    lastCycleTime[activeRole] = nil
 	
-		isActive = true
-		onOffButton.Text = "ON"
-		onOffButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
-		runLoop(activeRole)
+	    isActive = true
+	    onOffButton.Text = "ON"
+	    onOffButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+	    runLoop(activeRole)
 	end
 	
 	-- Assign handlers (instead of direct connections)
 	handleOnOffClick = function()
-		if activeRole then
-			-- Turning OFF
-			forceToggleOff()
-			usernameBox.Text, roleBox.Text = "", ""
-			won, timeoutElapsed = false, false
-			if cycleDurations10[activeRole] then
-				cycleDurations10[activeRole] = {}
-				cycleDurations100[activeRole] = {}
-				lastCycleTime[activeRole] = nil
-			end
-			if loopConnection and loopConnection.Connected then
-				loopConnection:Disconnect()
-				loopConnection = nil
-			end
-			activeRole, isActive = nil, false
-			onOffButton.Text = "OFF"
-			onOffButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-		else
-			-- Turning ON
-			validateAndAssignRole()
-		end
+	    if activeRole then
+	        -- Turning OFF
+	        forceToggleOff()
+	        usernameBox.Text, roleBox.Text = "", ""
+	        won, timeoutElapsed = false, false
+	
+	        if cycleDurations10[activeRole] then
+	            -- Reset all buffers for the current role
+	            cycleDurations1[activeRole]   = {}
+	            cycleDurations5[activeRole]   = {}
+	            cycleDurations10[activeRole]  = {}
+	            cycleDurations100[activeRole] = {}
+	            lastCycleTime[activeRole] = nil
+	        end
+	
+	        if loopConnection and loopConnection.Connected then
+	            loopConnection:Disconnect()
+	            loopConnection = nil
+	        end
+	
+	        activeRole, isActive = nil, false
+	        onOffButton.Text = "OFF"
+	        onOffButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+	    else
+	        -- Turning ON
+	        validateAndAssignRole()
+	    end
 	end
 	
 	handleSoloClick = function()
-		forceToggleOff()
-		waitSeconds(1)
-		activeRole, isActive = 3, true
-		won, timeoutElapsed = false, false
-		cycleDurations10[3], cycleDurations100[3], lastCycleTime[3] = {}, {}, nil
-		onOffButton.Text = "SOLO mode: ON"
-		onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
-		runLoop(3)
+	    forceToggleOff()
+	    waitSeconds(1)
+	    activeRole, isActive = 3, true
+	    won, timeoutElapsed = false, false
+	
+	    -- Reset all buffers for solo role
+	    cycleDurations1[3], cycleDurations5[3], cycleDurations10[3], cycleDurations100[3], lastCycleTime[3] =
+	        {}, {}, {}, {}, nil
+	
+	    onOffButton.Text = "SOLO mode: ON"
+	    onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+	    runLoop(3)
 	end
 end
