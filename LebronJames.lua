@@ -1,598 +1,558 @@
--- Get Services
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local player = Players.LocalPlayer
-
--- State and helpers
-local activeRole
-local loopConnection
-local winConnection
-local isActive = false
-local restartRole
-local listenForWin
-local runLoop
-
--- Handlers (assigned later)
-local handleOnOffClick
-local handleSoloClick
-
--- Adaptive restart state
-local won = false
-local timeoutElapsed = false
-
--- Cycle tracking (20 and 50 cycle buffers)
-local cycleDurations20 = { [1] = {}, [2] = {} }
-local cycleDurations50 = { [1] = {}, [2] = {} }
-local lastCycleTime    = { [1] = nil, [2] = nil }
-
-
--- Drift-proof wait helper
-local function waitSeconds(seconds)
-	local start = os.clock()
-	repeat RunService.Heartbeat:Wait() until os.clock() - start >= seconds
-end
-
--- RemoteEvent reference (listen-only)
-local SoundEvent = ReplicatedStorage:WaitForChild("Sound", 5)
-if not SoundEvent then
-	warn("❌ 'Sound' RemoteEvent not found in ReplicatedStorage, win detection disabled.")
-end
-
--- GUI Setup
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "RoleToggleGui"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = player:WaitForChild("PlayerGui")
-
--- Main Container Frame
-local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 450, 0, 300)
-mainFrame.Position = UDim2.new(0.5, -225, 0.5, -150)
-mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-mainFrame.BackgroundTransparency = 0.3
-mainFrame.BorderSizePixel = 0
-mainFrame.Parent = screenGui
-
--- Make GUI draggable
-local function makeDraggable(gui)
-	local dragging, dragStart, startPos = false, nil, nil
-	gui.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1
-		or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			dragStart = input.Position
-			startPos = gui.Position
-		end
+return function()
+	-- Get Services
+	local RunService = game:GetService("RunService")
+	local UserInputService = game:GetService("UserInputService")
+	local Players = game:GetService("Players")
+	local ReplicatedStorage = game:GetService("ReplicatedStorage")
+	local player = Players.LocalPlayer
+	
+	-- State and helpers
+	local activeRole
+	local loopConnection
+	local winConnection
+	local isActive = false
+	local restartRole
+	local listenForWin
+	local runLoop
+	
+	-- Handlers (assigned later)
+	local handleOnOffClick
+	local handleSoloClick
+	
+	-- Adaptive restart state
+	local won = false
+	local timeoutElapsed = false
+	
+	-- Cycle tracking (20 and 50 cycle buffers)
+	local cycleDurations20 = { [1] = {}, [2] = {} }
+	local cycleDurations50 = { [1] = {}, [2] = {} }
+	local lastCycleTime    = { [1] = nil, [2] = nil }
+	
+	-- Drift-proof wait helper
+	local function waitSeconds(seconds)
+	    local start = os.clock()
+	    repeat RunService.Heartbeat:Wait() until os.clock() - start >= seconds
+	end
+	
+	-- RemoteEvent reference (listen-only)
+	local SoundEvent = ReplicatedStorage:WaitForChild("Sound", 5)
+	if not SoundEvent then
+	    warn("❌ 'Sound' RemoteEvent not found in ReplicatedStorage, win detection disabled.")
+	end
+	
+	-- GUI Setup
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "RoleToggleGui"
+	screenGui.ResetOnSpawn = false
+	screenGui.Parent = player:WaitForChild("PlayerGui")
+	
+	-- Main Container Frame
+	local mainFrame = Instance.new("Frame")
+	mainFrame.Size = UDim2.new(0, 450, 0, 300)
+	mainFrame.Position = UDim2.new(0.5, -225, 0.5, -150)
+	mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	mainFrame.BackgroundTransparency = 0.3
+	mainFrame.BorderSizePixel = 0
+	mainFrame.Parent = screenGui
+	
+	-- Make GUI draggable
+	local function makeDraggable(gui)
+	    local dragging, dragStart, startPos = false, nil, nil
+	    gui.InputBegan:Connect(function(input)
+	        if input.UserInputType == Enum.UserInputType.MouseButton1
+	        or input.UserInputType == Enum.UserInputType.Touch then
+	            dragging = true
+	            dragStart = input.Position
+	            startPos = gui.Position
+	        end
+	    end)
+	    gui.InputEnded:Connect(function(input)
+	        if input.UserInputType == Enum.UserInputType.MouseButton1
+	        or input.UserInputType == Enum.UserInputType.Touch then
+	            dragging = false
+	        end
+	    end)
+	    UserInputService.InputChanged:Connect(function(input)
+	        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+	        or input.UserInputType == Enum.UserInputType.Touch) then
+	            local delta = input.Position - dragStart
+	            gui.Position = UDim2.new(
+	                startPos.X.Scale, startPos.X.Offset + delta.X,
+	                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+	            )
+	        end
+	    end)
+	end
+	makeDraggable(mainFrame)
+	
+	-- Utility to create buttons
+	local function createButton(text, position)
+	    local button = Instance.new("TextButton")
+	    button.Size = UDim2.new(0, 200, 0, 40)
+	    button.Position = position
+	    button.Text = text
+	    button.BackgroundColor3 = Color3.fromRGB(100, 170, 255)
+	    button.TextColor3 = Color3.new(1, 1, 1)
+	    button.Font = Enum.Font.Arcade
+	    button.TextSize = 20
+	    button.Active = true
+	    button.Selectable = true
+	    button.Parent = mainFrame
+	    return button
+	end
+	
+	-- GUI Elements
+	local soloButton = createButton("SOLO MODE", UDim2.new(0, 20, 0, 60))
+	local onOffButton = createButton("OFF", UDim2.new(0, 230, 0, 60))
+	
+	-- Username Text Box
+	local usernameBox = Instance.new("TextBox")
+	usernameBox.Size = UDim2.new(0, 200, 0, 40)
+	usernameBox.Position = UDim2.new(0, 20, 0, 120)
+	usernameBox.PlaceholderText = "Username"
+	usernameBox.Font = Enum.Font.Arcade
+	usernameBox.TextSize = 18
+	usernameBox.TextColor3 = Color3.new(1, 1, 1)
+	usernameBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	usernameBox.BorderSizePixel = 0
+	usernameBox.Parent = mainFrame
+	
+	-- Role Text Box
+	local roleBox = Instance.new("TextBox")
+	roleBox.Size = UDim2.new(0, 200, 0, 40)
+	roleBox.Position = UDim2.new(0, 230, 0, 120)
+	roleBox.PlaceholderText = "Enter role here!"
+	roleBox.Font = Enum.Font.Arcade
+	roleBox.TextSize = 18
+	roleBox.TextColor3 = Color3.new(1, 1, 1)
+	roleBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	roleBox.BorderSizePixel = 0
+	roleBox.Parent = mainFrame
+	
+	-- Title Bar Container
+	local titleBar = Instance.new("Frame")
+	titleBar.Size = UDim2.new(1, 0, 0, 40)
+	titleBar.BackgroundTransparency = 1
+	titleBar.Parent = mainFrame
+	
+	-- Minimise Button
+	local minimizeButton = Instance.new("TextButton")
+	minimizeButton.Size = UDim2.new(0, 40, 0, 40)
+	minimizeButton.AnchorPoint = Vector2.new(1, 0)
+	minimizeButton.Position = UDim2.new(1, -5, 0, 0)
+	minimizeButton.Text = "-"
+	minimizeButton.Font = Enum.Font.Arcade
+	minimizeButton.TextSize = 24
+	minimizeButton.TextColor3 = Color3.new(1, 1, 1)
+	minimizeButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+	minimizeButton.BorderSizePixel = 0
+	minimizeButton.Parent = titleBar
+	
+	-- Title Label
+	local padding = 10
+	local safeZone = minimizeButton.Size.X.Offset + padding
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.Size = UDim2.new(1, -safeZone, 1, 0)
+	titleLabel.Position = UDim2.new(0, 0, 0, 0)
+	titleLabel.Text = "LeBron James Endurance Script"
+	titleLabel.Font = Enum.Font.Arcade
+	titleLabel.TextSize = 24
+	titleLabel.TextColor3 = Color3.new(1, 1, 1)
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Center
+	titleLabel.Parent = titleBar
+	
+	-- Minimise / Maximise Logic
+	local minimized = false
+	local guiElements = { soloButton, onOffButton, usernameBox, roleBox }
+	local originalSize = mainFrame.Size
+	local originalPos = mainFrame.Position
+	local titleBarHeight = titleBar.Size.Y.Offset
+	
+	minimizeButton.MouseButton1Click:Connect(function()
+	    minimized = not minimized
+	    for _, element in ipairs(guiElements) do
+	        element.Visible = not minimized
+	    end
+	    minimizeButton.Text = minimized and "+" or "-"
+	    if minimized then
+	        mainFrame.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, titleBarHeight + 10)
+	        mainFrame.Position = UDim2.new(
+	            originalPos.X.Scale,
+	            originalPos.X.Offset,
+	            originalPos.Y.Scale,
+	            originalPos.Y.Offset + (originalSize.Y.Offset - (titleBarHeight + 10)) / 2
+	        )
+	    else
+	        mainFrame.Size = originalSize
+	        mainFrame.Position = originalPos
+	    end
 	end)
-	gui.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1
-		or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = false
-		end
+	
+	-- Force toggle off helper
+	local function forceToggleOff()
+	    if loopConnection and loopConnection.Connected then
+	        loopConnection:Disconnect()
+	        loopConnection = nil
+	    end
+	    if winConnection and winConnection.Connected then
+	        winConnection:Disconnect()
+	        winConnection = nil
+	    end
+	
+	    if activeRole then
+	        cycleDurations20[activeRole] = {}
+	        cycleDurations50[activeRole] = {}
+	        lastCycleTime[activeRole] = nil
+	    end
+	
+	    activeRole = nil
+	    isActive = false
+	    won, timeoutElapsed = false, false
+	
+	    onOffButton.Text = "OFF"
+	    onOffButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+	
+	    print("Script stopped")
+	end
+	
+	-- Button connections
+	onOffButton.MouseButton1Click:Connect(function()
+	    if handleOnOffClick then
+	        handleOnOffClick()
+	    else
+	        print("ON/OFF clicked but handler not ready yet")
+	    end
 	end)
-	UserInputService.InputChanged:Connect(function(input)
-		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
-		or input.UserInputType == Enum.UserInputType.Touch) then
-			local delta = input.Position - dragStart
-			gui.Position = UDim2.new(
-				startPos.X.Scale, startPos.X.Offset + delta.X,
-				startPos.Y.Scale, startPos.Y.Offset + delta.Y
-			)
-		end
+	
+	soloButton.MouseButton1Click:Connect(function()
+	    if handleSoloClick then
+	        handleSoloClick()
+	    else
+	        print("SOLO clicked but handler not ready yet")
+	    end
 	end)
-end
-makeDraggable(mainFrame)
-
--- Utility to create buttons
-local function createButton(text, position)
-	local button = Instance.new("TextButton")
-	button.Size = UDim2.new(0, 200, 0, 40)
-	button.Position = position
-	button.Text = text
-	button.BackgroundColor3 = Color3.fromRGB(100, 170, 255)
-	button.TextColor3 = Color3.new(1, 1, 1)
-	button.Font = Enum.Font.Arcade
-	button.TextSize = 20
-	button.Active = true
-	button.Selectable = true
-	button.Parent = mainFrame
-	return button
-end
-
--- GUI Elements
-local soloButton = createButton("SOLO MODE", UDim2.new(0, 20, 0, 60))
-local onOffButton = createButton("OFF", UDim2.new(0, 230, 0, 60))
-
--- Username Text Box
-local usernameBox = Instance.new("TextBox")
-usernameBox.Size = UDim2.new(0, 200, 0, 40)
-usernameBox.Position = UDim2.new(0, 20, 0, 120)
-usernameBox.PlaceholderText = "Username"
-usernameBox.Font = Enum.Font.Arcade
-usernameBox.TextSize = 18
-usernameBox.TextColor3 = Color3.new(1, 1, 1)
-usernameBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-usernameBox.BorderSizePixel = 0
-usernameBox.Parent = mainFrame
-
--- Role Text Box
-local roleBox = Instance.new("TextBox")
-roleBox.Size = UDim2.new(0, 200, 0, 40)
-roleBox.Position = UDim2.new(0, 230, 0, 120)
-roleBox.PlaceholderText = "Enter role here!"
-roleBox.Font = Enum.Font.Arcade
-roleBox.TextSize = 18
-roleBox.TextColor3 = Color3.new(1, 1, 1)
-roleBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-roleBox.BorderSizePixel = 0
-roleBox.Parent = mainFrame
-
--- Title Bar Container
-local titleBar = Instance.new("Frame")
-titleBar.Size = UDim2.new(1, 0, 0, 40)
-titleBar.BackgroundTransparency = 1
-titleBar.Parent = mainFrame
-
--- Minimise Button
-local minimizeButton = Instance.new("TextButton")
-minimizeButton.Size = UDim2.new(0, 40, 0, 40)
-minimizeButton.AnchorPoint = Vector2.new(1, 0)
-minimizeButton.Position = UDim2.new(1, -5, 0, 0)
-minimizeButton.Text = "-"
-minimizeButton.Font = Enum.Font.Arcade
-minimizeButton.TextSize = 24
-minimizeButton.TextColor3 = Color3.new(1, 1, 1)
-minimizeButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-minimizeButton.BorderSizePixel = 0
-minimizeButton.Parent = titleBar
-
--- Title Label (auto‑calculate safe zone)
-local padding = 10
-local safeZone = minimizeButton.Size.X.Offset + padding
-local titleLabel = Instance.new("TextLabel")
-titleLabel.Size = UDim2.new(1, -safeZone, 1, 0)
-titleLabel.Position = UDim2.new(0, 0, 0, 0)
-titleLabel.Text = "LeBron James Endurance Script"
-titleLabel.Font = Enum.Font.Arcade
-titleLabel.TextSize = 24
-titleLabel.TextColor3 = Color3.new(1, 1, 1)
-titleLabel.BackgroundTransparency = 1
-titleLabel.TextXAlignment = Enum.TextXAlignment.Center
-titleLabel.Parent = titleBar
-
--- Minimise / Maximise Logic
-local minimized = false
-local guiElements = { soloButton, onOffButton, usernameBox, roleBox }
-local originalSize = mainFrame.Size
-local originalPos = mainFrame.Position
-local titleBarHeight = titleBar.Size.Y.Offset
-
-minimizeButton.MouseButton1Click:Connect(function()
-	minimized = not minimized
-	for _, element in ipairs(guiElements) do
-		element.Visible = not minimized
-	end
-	minimizeButton.Text = minimized and "+" or "-"
-	if minimized then
-		mainFrame.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, titleBarHeight + 10)
-		mainFrame.Position = UDim2.new(
-			originalPos.X.Scale,
-			originalPos.X.Offset,
-			originalPos.Y.Scale,
-			originalPos.Y.Offset + (originalSize.Y.Offset - (titleBarHeight + 10)) / 2
-		)
-	else
-		mainFrame.Size = originalSize
-		mainFrame.Position = originalPos
-	end
-end)
-
--- Force toggle off helper
-local function forceToggleOff()
-	activeRole = nil
-	isActive = false
-	onOffButton.Text = "OFF"
-	onOffButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
-
-	if loopConnection and loopConnection.Connected then
-		loopConnection:Disconnect()
-		loopConnection = nil
-	end
-	if winConnection and winConnection.Connected then
-		winConnection:Disconnect()
-		winConnection = nil
-	end
-
-	-- Reset adaptive state
-	won, timeoutElapsed = false, false
+	
+	-- Cold start reset (initialise state once at load)
+	won = false
+	timeoutElapsed = false
 	cycleDurations20[1], cycleDurations20[2] = {}, {}
 	cycleDurations50[1], cycleDurations50[2] = {}, {}
 	lastCycleTime[1], lastCycleTime[2] = nil, nil
-
-	print("Script stopped")
-end
-
--- Button connections
-onOffButton.MouseButton1Click:Connect(function()
-	if handleOnOffClick then
-		handleOnOffClick()
-	else
-		print("ON/OFF clicked but handler not ready yet")
+	
+	-- Configs
+	local configs = {
+	    [1] = { name = "PLAYER 1: DUMMY", teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
+	    [2] = { name = "PLAYER 2: MAIN",  teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
+	    [3] = { name = "SOLO MODE",       teleportDelay = 0.15, deathDelay = 0.05, cycleDelay = 5.55 }
+	}
+	
+	-- Track wins separately
+	local p1Won = false
+	local p2Won = false
+	
+	-- Adaptive restart logic
+	local function adaptiveRestart(role, serverTime)
+	    if role ~= 1 and role ~= 2 then return end
+	
+	    local t = tonumber(serverTime)
+	    if not t then return end
+	
+	    if not restartRole then
+	        warn("[adaptiveRestart] restartRole is nil; restart skipped")
+	        return
+	    end
+	    if not recordCycle then
+	        warn("[adaptiveRestart] recordCycle is nil; metrics skipped")
+	    end
+	
+	    local avg20, avg50 = getCycleAverages(role)
+	    print(string.format("📊 Cycle averages for role %d: 20=%.3f, 50=%.3f", role, avg20 or -1, avg50 or -1))
+	
+	    local cycleLength = avg50 or avg20
+	    local source = avg50 and "avg50" or "avg20"
+	    if not cycleLength then
+	        print("⏸️ Skipping adaptive restart — no cycle data yet")
+	        return
+	    end
+	
+	    local phase = t % cycleLength
+	    local cyclesToSkip = 3
+	
+	    if role == 1 and p1Won then
+	        print("ℹ️ Player 1 win detected, but manual timing is preserved — no restart")
+	        p1Won = false
+	        return
+	    end
+	
+	    if role == 2 and p2Won and not p1Won then
+	        local baseDelay = (cyclesToSkip * cycleLength) - phase
+	        if baseDelay < 0 then baseDelay = baseDelay + cycleLength end
+	        local finalDelay = math.max(0, baseDelay - 2.5)
+	
+	        print(("P2 restart in %.2fs (cycle=%.3f, source=%s) [P2 win, P1 not winning]"):format(finalDelay, cycleLength, source))
+	        restartRole(2, finalDelay)
+	        if recordCycle then recordCycle(2) end
+	
+	        p2Won, p1Won = false, false
+	
+	    elseif role == 2 and timeoutElapsed then
+	        local baseDelay = (cyclesToSkip * cycleLength) - phase
+	        if baseDelay < 0 then baseDelay = baseDelay + cycleLength end
+	        local finalDelay = math.max(0, baseDelay - 2.5)
+	
+	        print(("P2 restart in %.2fs (cycle=%.3f, source=%s) [P1 timeout]"):format(finalDelay, cycleLength, source))
+	        restartRole(2, finalDelay)
+	        if recordCycle then recordCycle(2) end
+	
+	        timeoutElapsed = false
+	        p2Won, p1Won = false, false
+	    end
 	end
-end)
-
-soloButton.MouseButton1Click:Connect(function()
-	if handleSoloClick then
-		handleSoloClick()
-	else
-		print("SOLO clicked but handler not ready yet")
+	
+	-- Win/timeout detection with debouncing
+	local timeoutGen = 0
+	local winConnection1, winConnection2
+	
+	local function listenForWin(role)
+	    if role == 3 or not SoundEvent then return end
+	
+	    if role == 1 then
+	        if winConnection1 and winConnection1.Connected then
+	            winConnection1:Disconnect()
+	            winConnection1 = nil
+	        end
+	        if SoundEvent:IsA("RemoteEvent") then
+	            winConnection1 = SoundEvent.OnClientEvent:Connect(function(action, data)
+	                if activeRole ~= 1 then return end
+	                if action == "Play" and data and data.Name == "Win" then
+	                    p1Won = true
+	                    print("✅ Win event received for Player 1 (manual timing preserved)")
+	                    if winConnection1 and winConnection1.Connected then
+	                        winConnection1:Disconnect()
+	                        winConnection1 = nil
+	                    end
+	                end
+	            end)
+	        end
+	
+	        timeoutGen += 1
+	        local myGen = timeoutGen
+	        task.spawn(function()
+	            local startTime = os.clock()
+	            while os.clock() - startTime < 15 do
+	                if p1Won or activeRole ~= role or myGen ~= timeoutGen then return end
+	                RunService.Heartbeat:Wait()
+	            end
+	            if not p1Won and activeRole == role and myGen == timeoutGen then
+	                timeoutElapsed = true
+	                print("⚠️ Player 1 timed out after 15s, waiting for adaptive restart...")
+	            end
+	        end)
+	
+	    elseif role == 2 then
+	        if winConnection2 and winConnection2.Connected then
+	            winConnection2:Disconnect()
+	            winConnection2 = nil
+	        end
+	        if SoundEvent:IsA("RemoteEvent") then
+	            winConnection2 = SoundEvent.OnClientEvent:Connect(function(action, data)
+	                if activeRole ~= 2 then return end
+	                if action == "Play" and data and data.Name == "Win" then
+	                    p2Won = true
+	                    print("✅ Win event received for Player 2, waiting for adaptive restart...")
+	                    if winConnection2 and winConnection2.Connected then
+	                        winConnection2:Disconnect()
+	                        winConnection2 = nil
+	                    end
+	                end
+	            end)
+	        end
+	    end
 	end
-end)
-
--- Reset adaptive state (global reset)
-won = false
-timeoutElapsed = false
-cycleDurations20[1], cycleDurations20[2] = {}, {}
-cycleDurations50[1], cycleDurations50[2] = {}, {}
-lastCycleTime[1], lastCycleTime[2] = nil, nil
-
--- Configs
-local configs = {
-	[1] = { name = "PLAYER 1: DUMMY", teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
-	[2] = { name = "PLAYER 2: MAIN",  teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
-	[3] = { name = "SOLO MODE",       teleportDelay = 0.15, deathDelay = 0.05, cycleDelay = 5.55 }
-}
-
--- Track wins separately
-local p1Won = false
-local p2Won = false
-
--- Adaptive restart logic with hierarchy + continuous logging + P2 offset
-local function adaptiveRestart(role, serverTime)
-	if role ~= 1 and role ~= 2 then return end
-
-	local t = tonumber(serverTime)
-	if not t then return end
-
-	-- Guard against missing dependencies (prevents nil-call)
-	if not restartRole then
-		warn("[adaptiveRestart] restartRole is nil; restart skipped")
-		return
+					
+	-- Core loop logic
+	runLoop = function(role)
+	    if not isActive then return end
+	
+	    local config = configs and configs[role]
+	    if not config then
+	        warn(("runLoop: missing config for role %s"):format(tostring(role)))
+	        return
+	    end
+	
+	    local points
+	    if role == 1 then
+	        points = {
+	            workspace.Spar_Ring1.Player1_Button.CFrame,
+	            workspace.Spar_Ring4.Player1_Button.CFrame
+	        }
+	    elseif role == 2 then
+	        points = {
+	            workspace.Spar_Ring1.Player2_Button.CFrame,
+	            workspace.Spar_Ring4.Player2_Button.CFrame
+	        }
+	    elseif role == 3 then
+	        points = {
+	            workspace.Spar_Ring2.Player1_Button.CFrame,
+	            workspace.Spar_Ring2.Player2_Button.CFrame,
+	            workspace.Spar_Ring3.Player1_Button.CFrame,
+	            workspace.Spar_Ring3.Player2_Button.CFrame
+	        }
+	    end
+	    if not points or #points == 0 then
+	        warn("runLoop: no points available for role "..tostring(role))
+	        return
+	    end
+	
+	    if role == 1 or role == 2 then
+	        if listenForWin then
+	            listenForWin(role)
+	        else
+	            warn("runLoop: listenForWin is nil; win detection not armed")
+	        end
+	    end
+	
+	    local index, phase, phaseStart = 1, "teleport", os.clock()
+	
+	    if loopConnection and loopConnection.Connected then
+	        loopConnection:Disconnect()
+	        loopConnection = nil
+	    end
+	
+	    loopConnection = RunService.Heartbeat:Connect(function()
+	        if activeRole ~= role or not isActive then
+	            if loopConnection and loopConnection.Connected then
+	                loopConnection:Disconnect()
+	                loopConnection = nil
+	            end
+	            return
+	        end
+	
+	        local now = os.clock()
+	        local elapsed = now - phaseStart
+	
+	        if phase == "teleport" and elapsed >= config.teleportDelay then
+	            phase, phaseStart = "kill", now
+	            local char = player.Character
+	            if char then
+	                local hrp = char:FindFirstChild("HumanoidRootPart")
+	                if hrp and points[index] then
+	                    hrp.CFrame = points[index]
+	                end
+	            end
+	
+	        elseif phase == "kill" and elapsed >= config.deathDelay then
+	            phase, phaseStart = "respawn", now
+	            local char = player.Character
+	            if char then
+	                pcall(function() char:BreakJoints() end)
+	            end
+	
+	        elseif phase == "respawn" then
+	            local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	            if hrp then
+	                phase, phaseStart = "wait", os.clock()
+	            end
+	
+	        elseif phase == "wait" and elapsed >= config.cycleDelay then
+	            if recordCycle then
+	                recordCycle(role)
+	            else
+	                warn("runLoop: recordCycle is nil; cycle not recorded")
+	            end
+	
+	            phase, phaseStart = "teleport", os.clock()
+	            index = index % #points + 1
+	        end
+	    end)
+	
+	    if role == 1 then
+	        task.spawn(function()
+	            local checkStart = os.clock()
+	            while activeRole == 1 and isActive do
+	                local targetPlayer = Players:FindFirstChild(usernameBox.Text)
+	                if not targetPlayer and (os.clock() - checkStart) >= 10 then
+	                    print("Player 2 cannot be found! Switching to solo mode now... 🧍")
+	                    activeRole = nil
+	                    if restartRole then
+	                        restartRole(3, 1)
+	                    else
+	                        warn("runLoop: restartRole is nil; cannot switch to solo")
+	                    end
+	                    return
+	                elseif targetPlayer then
+	                    checkStart = os.clock()
+	                end
+	                waitSeconds(1)
+	            end
+	        end)
+	    end
 	end
-	if not recordCycle then
-		warn("[adaptiveRestart] recordCycle is nil; metrics skipped")
+	
+	-- Role validation and assignment
+	local function validateAndAssignRole()
+	    local targetName = usernameBox.Text
+	    local roleCommand = roleBox.Text
+	    local targetPlayer = Players:FindFirstChild(targetName)
+	
+	    if not targetPlayer or (roleCommand ~= "#AFK" and roleCommand ~= "#AFK2") then
+	        print("Validation failed")
+	        onOffButton.Text = "Validation failed"
+	        onOffButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+	        task.delay(3, function() forceToggleOff() end)
+	        return
+	    end
+	
+	    if roleCommand == "#AFK" then
+	        activeRole = 1
+	    elseif roleCommand == "#AFK2" then
+	        activeRole = 2
+	    end
+	
+	    won, timeoutElapsed, p1Won, p2Won = false, false, false, false
+	    cycleDurations20[activeRole] = {}
+	    cycleDurations50[activeRole] = {}
+	    lastCycleTime[activeRole] = nil
+	
+	    isActive = true
+	    onOffButton.Text = "ON"
+	    onOffButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+	
+	    if runLoop then
+	        runLoop(activeRole)
+	    else
+	        warn("validateAndAssignRole: runLoop is nil; cannot start loop")
+	    end
 	end
-
-	local avg20, avg50 = getCycleAverages(role)
-
-	-- Log both averages every time
-	print(string.format(
-		"📊 Cycle averages for role %d: 20=%.3f, 50=%.3f",
-		role,
-		avg20 or -1,
-		avg50 or -1
-	))
-
-	-- Prefer 50 > 20
-	local cycleLength, source
-	if avg50 then
-		cycleLength, source = avg50, "avg50"
-	elseif avg20 then
-		cycleLength, source = avg20, "avg20"
-	else
-		print("⏸️ Skipping adaptive restart — no cycle data yet")
-		return
+	
+	-- Assign handlers
+	handleOnOffClick = function()
+	    if activeRole then
+	        forceToggleOff()
+	        usernameBox.Text, roleBox.Text = "", ""
+	        p1Won, p2Won = false, false
+	    else
+	        validateAndAssignRole()
+	    end
 	end
-
-	local phase = t % cycleLength
-	local cyclesToSkip = 3 -- bumped from 2 → 3
-
-	-- Player 1: ignore wins (manual timing preserved)
-	if role == 1 and p1Won then
-		print("ℹ️ Player 1 win detected, but manual timing is preserved — no restart")
-		-- Clear the flag so it doesn't block future checks
-		p1Won = false
-		return
-	end
-
-	-- Player 2: restart only if P2 wins AND P1 hasn't
-	if role == 2 and p2Won and not p1Won then
-		local baseDelay = (cyclesToSkip * cycleLength) - phase
-		if baseDelay < 0 then baseDelay = baseDelay + cycleLength end
-		local finalDelay = math.max(0, baseDelay - 2.5)
-
-		print(("P2 restart in %.2fs (cycle=%.3f, source=%s) [P2 win, P1 not winning, offset -2.5s]"):format(finalDelay, cycleLength, source))
-		restartRole(2, finalDelay)
-
-		if recordCycle then
-			recordCycle(2)
-		end
-
-		-- Clear win flags after scheduling to avoid stale gating
-		p2Won = false
-		p1Won = false
-
-	elseif role == 2 and timeoutElapsed then
-		local baseDelay = (cyclesToSkip * cycleLength) - phase
-		if baseDelay < 0 then baseDelay = baseDelay + cycleLength end
-		local finalDelay = math.max(0, baseDelay - 2.5)
-
-		print(("P2 restart in %.2fs (cycle=%.3f, source=%s) [P1 timeout, offset -2.5s]"):format(finalDelay, cycleLength, source))
-		restartRole(2, finalDelay)
-
-		if recordCycle then
-			recordCycle(2)
-		end
-
-		timeoutElapsed = false
-		-- Also clear any stale win flags
-		p2Won = false
-		p1Won = false
-	end
-end
-
--- Win/timeout detection with debouncing
-local timeoutGen = 0
-local function listenForWin(role)
-	if role == 3 or not SoundEvent then return end
-
-	-- Replace any previous listener
-	if winConnection and winConnection.Connected then
-		winConnection:Disconnect()
-		winConnection = nil
-	end
-
-	if role == 1 then
-		-- Player 1 listens for win event
-		if SoundEvent:IsA("RemoteEvent") then
-			winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
-				if activeRole ~= 1 then return end
-				if action == "Play" and data and data.Name == "Win" then
-					p1Won = true
-					print("✅ Win event received for Player 1 (manual timing preserved, no restart)")
-					-- Disconnect to avoid repeated triggers in the same cycle
-					if winConnection and winConnection.Connected then
-						winConnection:Disconnect()
-						winConnection = nil
-					end
-				end
-			end)
-		else
-			warn("SoundEvent is not a RemoteEvent; Player 1 win detection unavailable.")
-		end
-
-		-- 15s timeout watchdog fallback
-		timeoutGen += 1
-		local myGen = timeoutGen
-		task.spawn(function()
-			local startTime = os.clock()
-			while os.clock() - startTime < 15 do
-				-- Cancel if P1 won, role changed, or a new generation started
-				if p1Won or activeRole ~= role or myGen ~= timeoutGen then return end
-				RunService.Heartbeat:Wait()
-			end
-			if not p1Won and activeRole == role and myGen == timeoutGen then
-				timeoutElapsed = true
-				print("⚠️ Player 1 timed out after 15s, waiting for adaptive restart...")
-			end
-		end)
-
-	elseif role == 2 then
-		-- Player 2 listens for win event
-		if SoundEvent:IsA("RemoteEvent") then
-			winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
-				if activeRole ~= 2 then return end
-				if action == "Play" and data and data.Name == "Win" then
-					p2Won = true
-					print("✅ Win event received for Player 2, waiting for adaptive restart...")
-					-- Disconnect to avoid repeated triggers in the same cycle
-					if winConnection and winConnection.Connected then
-						winConnection:Disconnect()
-						winConnection = nil
-					end
-				end
-			end)
-		else
-			warn("SoundEvent is not a RemoteEvent; Player 2 win detection unavailable.")
-		end
-	end
-end
-				
--- Core loop logic
-runLoop = function(role)
-	if not isActive then return end
-
-	-- Guard: configs must exist
-	local config = configs and configs[role]
-	if not config then
-		warn(("runLoop: missing config for role %s"):format(tostring(role)))
-		return
-	end
-
-	-- Points per role
-	local points
-	if role == 1 then
-		points = {
-			workspace.Spar_Ring1.Player1_Button.CFrame,
-			workspace.Spar_Ring4.Player1_Button.CFrame
-		}
-	elseif role == 2 then
-		points = {
-			workspace.Spar_Ring1.Player2_Button.CFrame,
-			workspace.Spar_Ring4.Player2_Button.CFrame
-		}
-	elseif role == 3 then
-		points = {
-			workspace.Spar_Ring2.Player1_Button.CFrame,
-			workspace.Spar_Ring2.Player2_Button.CFrame,
-			workspace.Spar_Ring3.Player1_Button.CFrame,
-			workspace.Spar_Ring3.Player2_Button.CFrame
-		}
-	end
-	if not points or #points == 0 then
-		warn("runLoop: no points available for role "..tostring(role))
-		return
-	end
-
-	-- No resets here anymore
-	if (role == 1 or role == 2) then
-		if listenForWin then
-			listenForWin(role)
-		else
-			warn("runLoop: listenForWin is nil; win detection not armed")
-		end
-	end
-
-	local index, phase, phaseStart = 1, "teleport", os.clock()
-
-	-- Ensure single active loopConnection
-	if loopConnection and loopConnection.Connected then
-		loopConnection:Disconnect()
-		loopConnection = nil
-	end
-
-	loopConnection = RunService.Heartbeat:Connect(function()
-		-- Hard guard against role change or stop
-		if activeRole ~= role or not isActive then
-			if loopConnection and loopConnection.Connected then
-				loopConnection:Disconnect()
-				loopConnection = nil
-			end
-			return
-		end
-
-		local now = os.clock()
-		local elapsed = now - phaseStart
-
-		if phase == "teleport" and elapsed >= config.teleportDelay then
-			phase, phaseStart = "kill", now
-			local char = player.Character
-			if char then
-				local hrp = char:FindFirstChild("HumanoidRootPart")
-				if hrp and points[index] then
-					hrp.CFrame = points[index]
-				end
-			end
-
-		elseif phase == "kill" and elapsed >= config.deathDelay then
-			phase, phaseStart = "respawn", now
-			local char = player.Character
-			if char then
-				pcall(function() char:BreakJoints() end)
-			end
-
-		elseif phase == "respawn" then
-			local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				phase, phaseStart = "wait", os.clock()
-			end
-
-		elseif phase == "wait" and elapsed >= config.cycleDelay then
-			-- ✅ Cycle complete, record it (guarded)
-			if recordCycle then
-				recordCycle(role)
-			else
-				warn("runLoop: recordCycle is nil; cycle not recorded")
-			end
-
-			-- Move to next cycle
-			phase, phaseStart = "teleport", os.clock()
-			index = index % #points + 1
-		end
-	end)
-
-	-- Solo fallback logic (unchanged, but guarded)
-	if role == 1 then
-		task.spawn(function()
-			local checkStart = os.clock()
-			while activeRole == 1 and isActive do
-				local targetPlayer = Players:FindFirstChild(usernameBox.Text)
-				if not targetPlayer and (os.clock() - checkStart) >= 10 then
-					print("Player 2 cannot be found! Switching to solo mode now... 🧍")
-					activeRole = nil
-					if restartRole then
-						restartRole(3, 1)
-					else
-						warn("runLoop: restartRole is nil; cannot switch to solo")
-					end
-					return
-				elseif targetPlayer then
-					checkStart = os.clock()
-				end
-				waitSeconds(1)
-			end
-		end)
-	end
-end
-
--- Role validation and assignment
-local function validateAndAssignRole()
-	local targetName = usernameBox.Text
-	local roleCommand = roleBox.Text
-	local targetPlayer = Players:FindFirstChild(targetName)
-
-	if not targetPlayer or (roleCommand ~= "#AFK" and roleCommand ~= "#AFK2") then
-		print("Validation failed")
-		onOffButton.Text = "Validation failed"
-		onOffButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-		task.delay(3, function() forceToggleOff() end)
-		return
-	end
-
-	if roleCommand == "#AFK" then
-		activeRole = 1
-	elseif roleCommand == "#AFK2" then
-		activeRole = 2
-	end
-
-	-- Reset flags and cycle buffers only when turning ON
-	won, timeoutElapsed = false, false
-	cycleDurations20[activeRole] = {}
-	cycleDurations50[activeRole] = {}
-	lastCycleTime[activeRole] = nil
-
-	isActive = true
-	onOffButton.Text = "ON"
-	onOffButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
-
-	if runLoop then
-		runLoop(activeRole)
-	else
-		warn("validateAndAssignRole: runLoop is nil; cannot start loop")
-	end
-end
-
--- Assign handlers (instead of direct connections)
-handleOnOffClick = function()
-	if activeRole then
-		-- Turning OFF — forceToggleOff already cleans everything
-		forceToggleOff()
-		usernameBox.Text, roleBox.Text = "", ""
-		-- No extra resets/disconnects needed here; forceToggleOff did them.
-	else
-		-- Turning ON
-		validateAndAssignRole()
-	end
-end
-
-handleSoloClick = function()
-	forceToggleOff()
-	waitSeconds(1)
-
-	activeRole, isActive = 3, true
-	won, timeoutElapsed = false, false
-
-	-- Reset all buffers for solo role
-	cycleDurations20[3], cycleDurations50[3], lastCycleTime[3] = {}, {}, nil
-
-	onOffButton.Text = "SOLO mode: ON"
-	onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
-
-	if runLoop then
-		runLoop(3)
-	else
-		warn("handleSoloClick: runLoop is nil; cannot start solo loop")
+	
+	handleSoloClick = function()
+	    forceToggleOff()
+	    waitSeconds(1)
+	
+	    activeRole, isActive = 3, true
+	    won, timeoutElapsed, p1Won, p2Won = false, false, false, false
+	
+	    cycleDurations20[3], cycleDurations50[3], lastCycleTime[3] = {}, {}, nil
+	
+	    onOffButton.Text = "SOLO mode: ON"
+	    onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+	
+	    if runLoop then
+	        runLoop(3)
+	    else
+	        warn("handleSoloClick: runLoop is nil; cannot start solo loop")
+	    end
 	end
 end
