@@ -9,11 +9,14 @@ return function()
 	-- State and helpers
 	local activeRole
 	local loopConnection
-	local winConnection
+	local winConnection1
+	local winConnection2
 	local isActive = false
 	local restartRole
 	local listenForWin
 	local runLoop
+	local recordCycle
+	local getCycleAverages
 	
 	-- Handlers (assigned later)
 	local handleOnOffClick
@@ -22,6 +25,7 @@ return function()
 	-- Adaptive restart state
 	local won = false
 	local timeoutElapsed = false
+	local p1Won, p2Won = false, false
 	
 	-- Cycle tracking (20 and 50 cycle buffers)
 	local cycleDurations20 = { [1] = {}, [2] = {} }
@@ -195,9 +199,13 @@ return function()
 	        loopConnection:Disconnect()
 	        loopConnection = nil
 	    end
-	    if winConnection and winConnection.Connected then
-	        winConnection:Disconnect()
-	        winConnection = nil
+	    if winConnection1 and winConnection1.Connected then
+	        winConnection1:Disconnect()
+	        winConnection1 = nil
+	    end
+	    if winConnection2 and winConnection2.Connected then
+	        winConnection2:Disconnect()
+	        winConnection2 = nil
 	    end
 	
 	    if activeRole then
@@ -209,6 +217,7 @@ return function()
 	    activeRole = nil
 	    isActive = false
 	    won, timeoutElapsed = false, false
+	    p1Won, p2Won = false, false
 	
 	    onOffButton.Text = "OFF"
 	    onOffButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
@@ -236,6 +245,7 @@ return function()
 	-- Cold start reset (initialise state once at load)
 	won = false
 	timeoutElapsed = false
+	p1Won, p2Won = false, false
 	cycleDurations20[1], cycleDurations20[2] = {}, {}
 	cycleDurations50[1], cycleDurations50[2] = {}, {}
 	lastCycleTime[1], lastCycleTime[2] = nil, nil
@@ -251,6 +261,49 @@ return function()
 	local p1Won = false
 	local p2Won = false
 	
+	-- Forward declare helpers
+	local recordCycle
+	local getCycleAverages
+	
+	-- Record a completed cycle for a role
+	recordCycle = function(role)
+	    local now = os.clock()
+	    local last = lastCycleTime[role]
+	
+	    if last then
+	        local duration = now - last
+	
+	        -- Insert into 20-cycle buffer
+	        table.insert(cycleDurations20[role], duration)
+	        if #cycleDurations20[role] > 20 then
+	            table.remove(cycleDurations20[role], 1)
+	        end
+	
+	        -- Insert into 50-cycle buffer
+	        table.insert(cycleDurations50[role], duration)
+	        if #cycleDurations50[role] > 50 then
+	            table.remove(cycleDurations50[role], 1)
+	        end
+	    end
+	
+	    -- Update last cycle timestamp
+	    lastCycleTime[role] = now
+	end
+	
+	-- Compute averages for a role
+	getCycleAverages = function(role)
+	    local function average(tbl)
+	        if #tbl == 0 then return nil end
+	        local sum = 0
+	        for _, v in ipairs(tbl) do
+	            sum += v
+	        end
+	        return sum / #tbl
+	    end
+	
+	    return average(cycleDurations20[role]), average(cycleDurations50[role])
+	end
+	
 	-- Adaptive restart logic
 	local function adaptiveRestart(role, serverTime)
 	    if role ~= 1 and role ~= 2 then return end
@@ -261,9 +314,6 @@ return function()
 	    if not restartRole then
 	        warn("[adaptiveRestart] restartRole is nil; restart skipped")
 	        return
-	    end
-	    if not recordCycle then
-	        warn("[adaptiveRestart] recordCycle is nil; metrics skipped")
 	    end
 	
 	    local avg20, avg50 = getCycleAverages(role)
@@ -281,7 +331,7 @@ return function()
 	
 	    if role == 1 and p1Won then
 	        print("ℹ️ Player 1 win detected, but manual timing is preserved — no restart")
-	        p1Won = false
+	        p1Won, p2Won = false, false
 	        return
 	    end
 	
@@ -292,7 +342,7 @@ return function()
 	
 	        print(("P2 restart in %.2fs (cycle=%.3f, source=%s) [P2 win, P1 not winning]"):format(finalDelay, cycleLength, source))
 	        restartRole(2, finalDelay)
-	        if recordCycle then recordCycle(2) end
+	        recordCycle(2)
 	
 	        p2Won, p1Won = false, false
 	
@@ -303,7 +353,7 @@ return function()
 	
 	        print(("P2 restart in %.2fs (cycle=%.3f, source=%s) [P1 timeout]"):format(finalDelay, cycleLength, source))
 	        restartRole(2, finalDelay)
-	        if recordCycle then recordCycle(2) end
+	        recordCycle(2)
 	
 	        timeoutElapsed = false
 	        p2Won, p1Won = false, false
@@ -312,7 +362,7 @@ return function()
 	
 	-- Win/timeout detection with debouncing
 	local timeoutGen = 0
-	local winConnection1, winConnection2
+	-- NOTE: winConnection1 and winConnection2 are already declared in Section 1
 	
 	local function listenForWin(role)
 	    if role == 3 or not SoundEvent then return end
@@ -456,12 +506,7 @@ return function()
 	            end
 	
 	        elseif phase == "wait" and elapsed >= config.cycleDelay then
-	            if recordCycle then
-	                recordCycle(role)
-	            else
-	                warn("runLoop: recordCycle is nil; cycle not recorded")
-	            end
-	
+	            recordCycle(role) -- no need for guard anymore
 	            phase, phaseStart = "teleport", os.clock()
 	            index = index % #points + 1
 	        end
@@ -519,11 +564,7 @@ return function()
 	    onOffButton.Text = "ON"
 	    onOffButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
 	
-	    if runLoop then
-	        runLoop(activeRole)
-	    else
-	        warn("validateAndAssignRole: runLoop is nil; cannot start loop")
-	    end
+	    runLoop(activeRole)
 	end
 	
 	-- Assign handlers
@@ -531,7 +572,7 @@ return function()
 	    if activeRole then
 	        forceToggleOff()
 	        usernameBox.Text, roleBox.Text = "", ""
-	        p1Won, p2Won = false, false
+	        -- p1Won/p2Won already cleared in forceToggleOff
 	    else
 	        validateAndAssignRole()
 	    end
@@ -549,10 +590,6 @@ return function()
 	    onOffButton.Text = "SOLO mode: ON"
 	    onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
 	
-	    if runLoop then
-	        runLoop(3)
-	    else
-	        warn("handleSoloClick: runLoop is nil; cannot start solo loop")
-	    end
+	    runLoop(3)
 	end
 end
