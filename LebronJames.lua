@@ -322,7 +322,7 @@ return function()
 	    return avg1, avg5, avg10, avg100
 	end
 	
-	-- Adaptive restart logic with hierarchy
+	-- Adaptive restart logic with hierarchy + continuous logging + P2 offset
 	local function adaptiveRestart(role, serverTime)
 	    if role ~= 1 and role ~= 2 then return end
 	
@@ -331,6 +331,17 @@ return function()
 	
 	    local avg1, avg5, avg10, avg100 = getCycleAverages(role)
 	
+	    -- Log all averages every time
+	    print(string.format(
+	        "📊 Cycle averages for role %d: 1=%.3f, 5=%.3f, 10=%.3f, 100=%.3f",
+	        role,
+	        avg1 or -1,
+	        avg5 or -1,
+	        avg10 or -1,
+	        avg100 or -1
+	    ))
+	
+	    -- Hierarchy: prefer 100 > 10 > 5 > 1
 	    local cycleLength, source
 	    if avg100 then
 	        cycleLength, source = avg100, "avg100"
@@ -352,17 +363,29 @@ return function()
 	        local baseDelay = (cyclesToSkip * cycleLength) - phase
 	        if baseDelay < 0 then baseDelay = baseDelay + cycleLength end
 	        local finalDelay = math.max(0, baseDelay - 2.5)
-	        print(("P1 restart in %.2fs (cycle=%.3f, source=%s)"):format(finalDelay, cycleLength, source))
+	        print(("P1 restart in %.2fs (cycle=%.3f, source=%s) [triggered by win]"):format(finalDelay, cycleLength, source))
 	        restartRole(1, finalDelay)
 	        recordCycle(1)
+	        won = false -- clear after scheduling
 	
-	    elseif role == 2 and timeoutElapsed then
-	        local baseDelay = (cyclesToSkip * cycleLength) - phase + 2.5
+	    elseif role == 2 and won then
+	        local baseDelay = (cyclesToSkip * cycleLength) - phase
 	        if baseDelay < 0 then baseDelay = baseDelay + cycleLength end
-	        local finalDelay = math.max(0, baseDelay - 15)
-	        print(("P2 restart in %.2fs (cycle=%.3f, source=%s)"):format(finalDelay, cycleLength, source))
+	        -- Player 2 starts 2.5s BEFORE Player 1
+	        local finalDelay = math.max(0, baseDelay - 2.5)
+	        print(("P2 restart in %.2fs (cycle=%.3f, source=%s) [triggered by win, offset -2.5s]"):format(finalDelay, cycleLength, source))
 	        restartRole(2, finalDelay)
 	        recordCycle(2)
+	        won = false -- clear after scheduling
+	
+	    elseif role == 2 and timeoutElapsed then
+	        local baseDelay = (cyclesToSkip * cycleLength) - phase
+	        if baseDelay < 0 then baseDelay = baseDelay + cycleLength end
+	        local finalDelay = math.max(0, baseDelay - 2.5)
+	        print(("P2 restart in %.2fs (cycle=%.3f, source=%s) [triggered by timeout, offset -2.5s]"):format(finalDelay, cycleLength, source))
+	        restartRole(2, finalDelay)
+	        recordCycle(2)
+	        timeoutElapsed = false -- clear after scheduling
 	    end
 	end
 	
@@ -459,7 +482,7 @@ return function()
 	        end
 	    end
 	end
-	
+					
 	-- Core loop logic
 	runLoop = function(role)
 	    if not isActive then return end
