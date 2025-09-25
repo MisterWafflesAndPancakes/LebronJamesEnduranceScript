@@ -16,7 +16,7 @@ return function()
 	local listenForWin
 	local runLoop
 	local recordCycle
-	local getCycleAverages
+	local getCycleAverage   -- renamed for clarity (10‑cycle only)
 	
 	-- Handlers (assigned later)
 	local handleOnOffClick
@@ -27,9 +27,8 @@ return function()
 	local timeoutElapsed = false
 	local p1Won, p2Won = false, false
 	
-	-- Cycle tracking (20 and 50 cycle buffers)
-	local cycleDurations20 = { [1] = {}, [2] = {} }
-	local cycleDurations50 = { [1] = {}, [2] = {} }
+	-- Cycle tracking (10‑cycle buffer only)
+	local cycleDurations10 = { [1] = {}, [2] = {} }
 	local lastCycleTime    = { [1] = nil, [2] = nil }
 	
 	-- Drift-proof wait helper
@@ -195,6 +194,7 @@ return function()
 	
 	-- Force toggle off helper
 	local function forceToggleOff()
+	    -- Disconnect loop + win listeners
 	    if loopConnection and loopConnection.Connected then
 	        loopConnection:Disconnect()
 	        loopConnection = nil
@@ -208,17 +208,19 @@ return function()
 	        winConnection2 = nil
 	    end
 	
+	    -- Reset cycle tracking for the active role
 	    if activeRole then
-	        cycleDurations20[activeRole] = {}
-	        cycleDurations50[activeRole] = {}
+	        cycleDurations10[activeRole] = {}
 	        lastCycleTime[activeRole] = nil
 	    end
 	
+	    -- Reset state flags
 	    activeRole = nil
 	    isActive = false
 	    won, timeoutElapsed = false, false
 	    p1Won, p2Won = false, false
 	
+	    -- UI feedback
 	    onOffButton.Text = "OFF"
 	    onOffButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
 	
@@ -246,9 +248,10 @@ return function()
 	won = false
 	timeoutElapsed = false
 	p1Won, p2Won = false, false
-	cycleDurations20[1], cycleDurations20[2] = {}, {}
-	cycleDurations50[1], cycleDurations50[2] = {}, {}
-	lastCycleTime[1], lastCycleTime[2] = nil, nil
+	
+	-- Reset cycle tracking for roles 1 and 2
+	cycleDurations10 = { [1] = {}, [2] = {} }
+	lastCycleTime    = { [1] = nil, [2] = nil }
 	
 	-- Configs
 	local configs = {
@@ -257,213 +260,179 @@ return function()
 	    [3] = { name = "SOLO MODE",       teleportDelay = 0.15, deathDelay = 0.05, cycleDelay = 5.55 }
 	}
 	
-	-- Track wins separately
-	local p1Won = false
-	local p2Won = false
+	-- Track wins
+	local p1Won, p2Won = false, false
+	local timeoutGen = 0
 	
-	-- Forward declare helpers
-	local recordCycle
-	local getCycleAverages
+	-- Rolling buffer (10 cycles)
+	local cycleDurations10 = { [1] = {}, [2] = {} }
+	local lastCycleTime = { [1] = nil, [2] = nil }
 	
-	-- Record a completed cycle for a role
-	recordCycle = function(role)
+	-- Record a completed cycle
+	local function recordCycle(role)
 	    local now = os.clock()
 	    local last = lastCycleTime[role]
-	
 	    if last then
 	        local duration = now - last
-	
-	        -- Insert into 20-cycle buffer
-	        table.insert(cycleDurations20[role], duration)
-	        if #cycleDurations20[role] > 20 then
-	            table.remove(cycleDurations20[role], 1)
+	        table.insert(cycleDurations10[role], duration)
+	        if #cycleDurations10[role] > 10 then
+	            table.remove(cycleDurations10[role], 1)
 	        end
-	
-	        -- Insert into 50-cycle buffer
-	        table.insert(cycleDurations50[role], duration)
-	        if #cycleDurations50[role] > 50 then
-	            table.remove(cycleDurations50[role], 1)
-	        end
+	        print(("📏 Role %d cycle length: %.3fs"):format(role, duration))
 	    end
-	
-	    -- Update last cycle timestamp
 	    lastCycleTime[role] = now
 	end
 	
-	-- Compute averages for a role
-	getCycleAverages = function(role)
-	    local function average(tbl)
-	        if #tbl == 0 then return nil end
-	        local sum = 0
-	        for _, v in ipairs(tbl) do
-	            sum += v
-	        end
-	        return sum / #tbl
-	    end
-	
-	    return average(cycleDurations20[role]), average(cycleDurations50[role])
+	-- Compute average cycle length
+	local function getCycleAverage(role)
+	    local tbl = cycleDurations10[role]
+	    if not tbl or #tbl == 0 then return nil end
+	    local sum = 0
+	    for _, v in ipairs(tbl) do sum += v end
+	    return sum / #tbl
 	end
 	
-	-- Adaptive restart logic
-	local function adaptiveRestart(role, serverTime)
-	    if role ~= 1 and role ~= 2 then return end
-	
-	    local t = tonumber(serverTime)
-	    if not t then return end
-	
-	    if not restartRole then
-	        warn("[adaptiveRestart] restartRole is nil; restart skipped")
-	        return
+	-- Restart a role after a delay, ensuring the old loop is stopped first
+	function restartRole(role, delay)
+	    -- Stop any existing loop/listeners
+	    if loopConnection and loopConnection.Connected then
+	        loopConnection:Disconnect()
+	        loopConnection = nil
+	    end
+	    if winConnection1 and winConnection1.Connected then
+	        winConnection1:Disconnect()
+	        winConnection1 = nil
+	    end
+	    if winConnection2 and winConnection2.Connected then
+	        winConnection2:Disconnect()
+	        winConnection2 = nil
 	    end
 	
-	    local avg20, avg50 = getCycleAverages(role)
-	    print(string.format("📊 Cycle averages for role %d: 20=%.3f, 50=%.3f", role, avg20 or -1, avg50 or -1))
+	    isActive = false
 	
-	    local cycleLength = avg50 or avg20
-	    local source = avg50 and "avg50" or "avg20"
+	    -- Schedule the restart
+	    task.delay(delay or 0, function()
+	        if activeRole == role then
+	            -- Reset cycle tracking and flags
+	            cycleDurations10[role] = {}
+	            lastCycleTime[role] = nil
+	            p1Won, p2Won, timeoutElapsed = false, false, false
+	
+	            -- Start fresh
+	            isActive = true
+	            runLoop(role)
+	            listenForWin(role)
+	
+	            print(("🔄 Role %d restarted after %.2fs"):format(role, delay or 0))
+	        else
+	            print(("ℹ️ Restart for role %d skipped (activeRole changed)"):format(role))
+	        end
+	    end)
+	end
+	
+	-- Adaptive restart logic (P2 always 2.5s before P1)
+	local function adaptiveRestart(role, serverTime)
+	    if role ~= 2 then return end
+	    local t = tonumber(serverTime)
+	    if not t or not restartRole then return end
+	
+	    local cycleLength = getCycleAverage(1) or (configs[1] and configs[1].cycleDelay)
 	    if not cycleLength then
 	        print("⏸️ Skipping adaptive restart — no cycle data yet")
 	        return
 	    end
 	
 	    local phase = t % cycleLength
-	    local cyclesToSkip = 3
+	    -- Target offset: P2 should be 2.5s ahead of P1
+	    local targetOffset = cycleLength - 2.5
+	    local delay = (targetOffset - phase) % cycleLength
 	
-	    if role == 1 and p1Won then
-	        print("ℹ️ Player 1 win detected, but manual timing is preserved — no restart")
+	    if p2Won and not p1Won then
+	        print(("🔄 Restarting P2 in %.2fs (cycle=%.3f) [P2 win]"):format(delay, cycleLength))
+	        restartRole(2, delay)
 	        p1Won, p2Won = false, false
-	        return
-	    end
 	
-	    if role == 2 and p2Won and not p1Won then
-	        local baseDelay = (cyclesToSkip * cycleLength) - phase
-	        if baseDelay < 0 then baseDelay = baseDelay + cycleLength end
-	        local finalDelay = math.max(0, baseDelay - 2.5)
-	
-	        print(("P2 restart in %.2fs (cycle=%.3f, source=%s) [P2 win, P1 not winning]"):format(finalDelay, cycleLength, source))
-	        restartRole(2, finalDelay)
-	        recordCycle(2)
-	
-	        p2Won, p1Won = false, false
-	
-	    elseif role == 2 and timeoutElapsed then
-	        local baseDelay = (cyclesToSkip * cycleLength) - phase
-	        if baseDelay < 0 then baseDelay = baseDelay + cycleLength end
-	        local finalDelay = math.max(0, baseDelay - 2.5)
-	
-	        print(("P2 restart in %.2fs (cycle=%.3f, source=%s) [P1 timeout]"):format(finalDelay, cycleLength, source))
-	        restartRole(2, finalDelay)
-	        recordCycle(2)
-	
+	    elseif timeoutElapsed then
+	        print(("🔄 Restarting P2 in %.2fs (cycle=%.3f) [P1 timeout]"):format(delay, cycleLength))
+	        restartRole(2, delay)
 	        timeoutElapsed = false
-	        p2Won, p1Won = false, false
+	        p1Won, p2Won = false, false
 	    end
 	end
 	
-	-- Win/timeout detection with debouncing
-	local timeoutGen = 0
-	-- NOTE: winConnection1 and winConnection2 are already declared in Section 1
-	
+	-- Win/timeout detection
 	local function listenForWin(role)
 	    if role == 3 or not SoundEvent then return end
 	
 	    if role == 1 then
 	        if winConnection1 and winConnection1.Connected then
 	            winConnection1:Disconnect()
-	            winConnection1 = nil
 	        end
-	        if SoundEvent:IsA("RemoteEvent") then
-	            winConnection1 = SoundEvent.OnClientEvent:Connect(function(action, data)
-	                if activeRole ~= 1 then return end
-	                if action == "Play" and data and data.Name == "Win" then
-	                    p1Won = true
-	                    print("✅ Win event received for Player 1 (manual timing preserved)")
-	                    if winConnection1 and winConnection1.Connected then
-	                        winConnection1:Disconnect()
-	                        winConnection1 = nil
-	                    end
-	                end
-	            end)
-	        end
+	        winConnection1 = SoundEvent.OnClientEvent:Connect(function(action, data)
+	            if activeRole ~= 1 then return end
+	            if action == "Play" and type(data) == "table" and data.Name == "Win" then
+	                p1Won = true
+	                print("✅ Win event received for Player 1")
+	            end
+	        end)
 	
 	        timeoutGen += 1
 	        local myGen = timeoutGen
 	        task.spawn(function()
 	            local startTime = os.clock()
 	            while os.clock() - startTime < 15 do
-	                if p1Won or activeRole ~= role or myGen ~= timeoutGen then return end
+	                if p1Won or activeRole ~= 1 or myGen ~= timeoutGen then return end
 	                RunService.Heartbeat:Wait()
 	            end
-	            if not p1Won and activeRole == role and myGen == timeoutGen then
+	            if not p1Won and activeRole == 1 and myGen == timeoutGen then
 	                timeoutElapsed = true
-	                print("⚠️ Player 1 timed out after 15s, waiting for adaptive restart...")
+	                print("⚠️ Player 1 timed out after 15s")
 	            end
 	        end)
 	
 	    elseif role == 2 then
 	        if winConnection2 and winConnection2.Connected then
 	            winConnection2:Disconnect()
-	            winConnection2 = nil
 	        end
-	        if SoundEvent:IsA("RemoteEvent") then
-	            winConnection2 = SoundEvent.OnClientEvent:Connect(function(action, data)
-	                if activeRole ~= 2 then return end
-	                if action == "Play" and data and data.Name == "Win" then
-	                    p2Won = true
-	                    print("✅ Win event received for Player 2, waiting for adaptive restart...")
-	                    if winConnection2 and winConnection2.Connected then
-	                        winConnection2:Disconnect()
-	                        winConnection2 = nil
-	                    end
-	                end
-	            end)
-	        end
+	        winConnection2 = SoundEvent.OnClientEvent:Connect(function(action, data)
+	            if activeRole ~= 2 then return end
+	            if action == "Play" and type(data) == "table" and data.Name == "Win" then
+	                p2Won = true
+	                print("✅ Win event received for Player 2")
+	            end
+	        end)
 	    end
 	end
 					
-	-- Core loop logic
-	runLoop = function(role)
-	    if not isActive then return end
+	-- Core loop (os.clock() based, drift-proof) with role-1 watchdog
+	function runLoop(role)
+	    local points = role == 1 and {
+	        workspace.Spar_Ring1.Player1_Button.CFrame,
+	        workspace.Spar_Ring4.Player1_Button.CFrame
+	    } or role == 2 and {
+	        workspace.Spar_Ring1.Player2_Button.CFrame,
+	        workspace.Spar_Ring4.Player2_Button.CFrame
+	    } or role == 3 and {
+	        workspace.Spar_Ring2.Player1_Button.CFrame,
+	        workspace.Spar_Ring2.Player2_Button.CFrame,
+	        workspace.Spar_Ring3.Player1_Button.CFrame,
+	        workspace.Spar_Ring3.Player2_Button.CFrame
+	    }
 	
-	    local config = configs and configs[role]
+	    if not points then
+	        warn("runLoop: no points available for role "..tostring(role))
+	        return
+	    end
+	
+	    local config = configs[role]
 	    if not config then
 	        warn(("runLoop: missing config for role %s"):format(tostring(role)))
 	        return
 	    end
 	
-	    local points
-	    if role == 1 then
-	        points = {
-	            workspace.Spar_Ring1.Player1_Button.CFrame,
-	            workspace.Spar_Ring4.Player1_Button.CFrame
-	        }
-	    elseif role == 2 then
-	        points = {
-	            workspace.Spar_Ring1.Player2_Button.CFrame,
-	            workspace.Spar_Ring4.Player2_Button.CFrame
-	        }
-	    elseif role == 3 then
-	        points = {
-	            workspace.Spar_Ring2.Player1_Button.CFrame,
-	            workspace.Spar_Ring2.Player2_Button.CFrame,
-	            workspace.Spar_Ring3.Player1_Button.CFrame,
-	            workspace.Spar_Ring3.Player2_Button.CFrame
-	        }
-	    end
-	    if not points or #points == 0 then
-	        warn("runLoop: no points available for role "..tostring(role))
-	        return
-	    end
-	
-	    if role == 1 or role == 2 then
-	        if listenForWin then
-	            listenForWin(role)
-	        else
-	            warn("runLoop: listenForWin is nil; win detection not armed")
-	        end
-	    end
-	
-	    local index, phase, phaseStart = 1, "teleport", os.clock()
+	    local index = 1
+	    local phase = "teleport"
+	    local phaseStart = os.clock()
 	
 	    if loopConnection and loopConnection.Connected then
 	        loopConnection:Disconnect()
@@ -484,12 +453,10 @@ return function()
 	
 	        if phase == "teleport" and elapsed >= config.teleportDelay then
 	            phase, phaseStart = "kill", now
-	            local char = player.Character
-	            if char then
-	                local hrp = char:FindFirstChild("HumanoidRootPart")
-	                if hrp and points[index] then
-	                    hrp.CFrame = points[index]
-	                end
+	            local char = player.Character or player.CharacterAdded:Wait()
+	            local hrp = char:FindFirstChild("HumanoidRootPart")
+	            if hrp then
+	                hrp.CFrame = points[index]
 	            end
 	
 	        elseif phase == "kill" and elapsed >= config.deathDelay then
@@ -502,16 +469,18 @@ return function()
 	        elseif phase == "respawn" then
 	            local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	            if hrp then
+	                -- ✅ Record cycle at respawn (drift-proof anchor)
+	                if recordCycle then recordCycle(role) end
 	                phase, phaseStart = "wait", os.clock()
 	            end
 	
 	        elseif phase == "wait" and elapsed >= config.cycleDelay then
-	            recordCycle(role) -- no need for guard anymore
 	            phase, phaseStart = "teleport", os.clock()
 	            index = index % #points + 1
 	        end
 	    end)
 	
+	    -- Role-1 watchdog: fallback to solo if partner missing
 	    if role == 1 then
 	        task.spawn(function()
 	            local checkStart = os.clock()
@@ -535,12 +504,19 @@ return function()
 	    end
 	end
 	
+	-- Reset cycle tracking for a given role
+	local function resetCycles(role)
+	    cycleDurations10[role] = {}
+	    lastCycleTime[role] = nil
+	end
+	
 	-- Role validation and assignment
 	local function validateAndAssignRole()
 	    local targetName = usernameBox.Text
 	    local roleCommand = roleBox.Text
 	    local targetPlayer = Players:FindFirstChild(targetName)
 	
+	    -- Validation
 	    if not targetPlayer or (roleCommand ~= "#AFK" and roleCommand ~= "#AFK2") then
 	        print("Validation failed")
 	        onOffButton.Text = "Validation failed"
@@ -549,16 +525,16 @@ return function()
 	        return
 	    end
 	
+	    -- Assign role
 	    if roleCommand == "#AFK" then
 	        activeRole = 1
 	    elseif roleCommand == "#AFK2" then
 	        activeRole = 2
 	    end
 	
-	    won, timeoutElapsed, p1Won, p2Won = false, false, false, false
-	    cycleDurations20[activeRole] = {}
-	    cycleDurations50[activeRole] = {}
-	    lastCycleTime[activeRole] = nil
+	    -- Reset state + cycles
+	    p1Won, p2Won, timeoutElapsed = false, false, false
+	    resetCycles(activeRole)
 	
 	    isActive = true
 	    onOffButton.Text = "ON"
@@ -572,7 +548,6 @@ return function()
 	    if activeRole then
 	        forceToggleOff()
 	        usernameBox.Text, roleBox.Text = "", ""
-	        -- p1Won/p2Won already cleared in forceToggleOff
 	    else
 	        validateAndAssignRole()
 	    end
@@ -583,9 +558,8 @@ return function()
 	    waitSeconds(1)
 	
 	    activeRole, isActive = 3, true
-	    won, timeoutElapsed, p1Won, p2Won = false, false, false, false
-	
-	    cycleDurations20[3], cycleDurations50[3], lastCycleTime[3] = {}, {}, nil
+	    p1Won, p2Won, timeoutElapsed = false, false, false
+	    resetCycles(3)
 	
 	    onOffButton.Text = "SOLO mode: ON"
 	    onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
