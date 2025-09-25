@@ -1,3 +1,4 @@
+
 return function()
 	-- Get Services
 	local RunService = game:GetService("RunService")
@@ -347,17 +348,8 @@ return function()
 	    local targetOffset = cycleLength - 2.5
 	    local delay = (targetOffset - phase) % cycleLength
 	
-	    if p2Won and not p1Won then
-	        print(("🔄 Restarting P2 in %.2fs (cycle=%.3f) [P2 win]"):format(delay, cycleLength))
-	        restartRole(2, delay)
-	        p1Won, p2Won = false, false
-	
-	    elseif timeoutElapsed then
-	        print(("🔄 Restarting P2 in %.2fs (cycle=%.3f) [P1 timeout]"):format(delay, cycleLength))
-	        restartRole(2, delay)
-	        timeoutElapsed = false
-	        p1Won, p2Won = false, false
-	    end
+	    print(("🔄 Adaptive restart scheduled for P2 in %.2fs (cycle=%.3f)"):format(delay, cycleLength))
+	    restartRole(2, delay)
 	end
 	
 	-- Win/timeout detection
@@ -376,6 +368,7 @@ return function()
 	            end
 	        end)
 	
+	        -- Watchdog: if no win in 15s, treat as timeout and restart P2
 	        timeoutGen += 1
 	        local myGen = timeoutGen
 	        task.spawn(function()
@@ -386,7 +379,8 @@ return function()
 	            end
 	            if not p1Won and activeRole == 1 and myGen == timeoutGen then
 	                timeoutElapsed = true
-	                print("⚠️ Player 1 timed out after 15s")
+	                print("⚠️ Player 1 timed out after 15s — forcing P2 restart")
+	                adaptiveRestart(2, os.clock())
 	            end
 	        end)
 	
@@ -398,7 +392,8 @@ return function()
 	            if activeRole ~= 2 then return end
 	            if action == "Play" and type(data) == "table" and data.Name == "Win" then
 	                p2Won = true
-	                print("✅ Win event received for Player 2")
+	                print("✅ Win event received for Player 2 — restarting immediately")
+	                adaptiveRestart(2, os.clock())
 	            end
 	        end)
 	    end
