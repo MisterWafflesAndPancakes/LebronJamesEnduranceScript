@@ -1,4 +1,3 @@
-
 return function()
 	-- Get Services
 	local RunService = game:GetService("RunService")
@@ -279,7 +278,6 @@ return function()
 	        if #cycleDurations10[role] > 10 then
 	            table.remove(cycleDurations10[role], 1)
 	        end
-	        print(("📏 Role %d cycle length: %.3fs"):format(role, duration))
 	    end
 	    lastCycleTime[role] = now
 	end
@@ -331,27 +329,6 @@ return function()
 	    end)
 	end
 	
-	-- Adaptive restart logic (P2 always 2.5s before P1)
-	local function adaptiveRestart(role, serverTime)
-	    if role ~= 2 then return end
-	    local t = tonumber(serverTime)
-	    if not t or not restartRole then return end
-	
-	    local cycleLength = getCycleAverage(1) or (configs[1] and configs[1].cycleDelay)
-	    if not cycleLength then
-	        print("⏸️ Skipping adaptive restart — no cycle data yet")
-	        return
-	    end
-	
-	    local phase = t % cycleLength
-	    -- Target offset: P2 should be 2.5s ahead of P1
-	    local targetOffset = cycleLength - 2.5
-	    local delay = (targetOffset - phase) % cycleLength
-	
-	    print(("🔄 Adaptive restart scheduled for P2 in %.2fs (cycle=%.3f)"):format(delay, cycleLength))
-	    restartRole(2, delay)
-	end
-	
 	-- Win/timeout detection
 	local function listenForWin(role)
 	    if role == 3 or not SoundEvent then return end
@@ -368,7 +345,7 @@ return function()
 	            end
 	        end)
 	
-	        -- Watchdog: if no win in 15s, treat as timeout and restart P2
+	        -- Watchdog: if no win in 15s, restart P1 using avg+10
 	        timeoutGen += 1
 	        local myGen = timeoutGen
 	        task.spawn(function()
@@ -379,8 +356,10 @@ return function()
 	            end
 	            if not p1Won and activeRole == 1 and myGen == timeoutGen then
 	                timeoutElapsed = true
-	                print("⚠️ Player 1 timed out after 15s — forcing P2 restart")
-	                adaptiveRestart(2, os.clock())
+	                local avg = getCycleAverage(1) or (configs[1] and configs[1].cycleDelay) or 0
+	                local delay = avg + 10
+	                print(("⚠️ P1 timed out — restarting after %.2fs (avg=%.3f+10)"):format(delay, avg))
+	                restartRole(1, delay)
 	            end
 	        end)
 	
@@ -392,8 +371,10 @@ return function()
 	            if activeRole ~= 2 then return end
 	            if action == "Play" and type(data) == "table" and data.Name == "Win" then
 	                p2Won = true
-	                print("✅ Win event received for Player 2 — restarting immediately")
-	                adaptiveRestart(2, os.clock())
+	                local avg = getCycleAverage(2) or (configs[2] and configs[2].cycleDelay) or 0
+	                local delay = avg + 22.5
+	                print(("✅ P2 win — restarting after %.2fs (avg=%.3f+22.5)"):format(delay, avg))
+	                restartRole(2, delay)
 	            end
 	        end)
 	    end
@@ -475,7 +456,7 @@ return function()
 	        end
 	    end)
 	
-	    -- Role-1 watchdog: fallback to solo if partner missing
+	    -- SOLO Fallback
 	    if role == 1 then
 	        task.spawn(function()
 	            local checkStart = os.clock()
