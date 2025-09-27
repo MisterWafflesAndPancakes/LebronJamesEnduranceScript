@@ -52,8 +52,8 @@ return function()
 	local mainContainer = Instance.new("Frame")
 	mainContainer.Size = UDim2.new(0, 450, 0, 300) -- 40 for title + 260 for page
 	mainContainer.Position = UDim2.new(0.5, -225, 0.5, -190)
-	mainContainer.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-	mainContainer.BackgroundTransparency = 0.25
+	mainContainer.BackgroundColor3 = Color3.fromRGB(25, 25, 25) -- darker gray
+	mainContainer.BackgroundTransparency = 0.25                 -- consistent transparency
 	mainContainer.BorderSizePixel = 0
 	mainContainer.Parent = screenGui
 	
@@ -76,7 +76,7 @@ return function()
 	minimizeButton.TextColor3 = Color3.new(1, 1, 1)
 	minimizeButton.TextStrokeTransparency = 0.8
 	minimizeButton.TextStrokeColor3 = Color3.fromRGB(0,0,0)
-	minimizeButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+	minimizeButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25) -- unified with container
 	minimizeButton.BackgroundTransparency = 0.25
 	minimizeButton.BorderSizePixel = 0
 	minimizeButton.Parent = titleBar
@@ -90,7 +90,7 @@ return function()
 	titleLabel.TextColor3 = Color3.new(1, 1, 1)
 	titleLabel.TextStrokeTransparency = 0.8
 	titleLabel.TextStrokeColor3 = Color3.fromRGB(0,0,0)
-	titleLabel.BackgroundTransparency = 1
+	titleLabel.BackgroundTransparency = 1 -- no box behind text
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Center
 	titleLabel.Parent = titleBar
 	
@@ -100,8 +100,8 @@ return function()
 	    button.Size = size or UDim2.new(0, 200, 0, 40)
 	    button.Position = position
 	    button.Text = text
-	    button.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-	    button.BackgroundTransparency = 0.25
+	    button.BackgroundColor3 = Color3.fromRGB(25, 25, 25) -- darker gray
+	    button.BackgroundTransparency = 0.25                 -- consistent transparency
 	    button.TextColor3 = Color3.new(1, 1, 1)
 	    button.TextStrokeTransparency = 0.8
 	    button.TextStrokeColor3 = Color3.fromRGB(0,0,0)
