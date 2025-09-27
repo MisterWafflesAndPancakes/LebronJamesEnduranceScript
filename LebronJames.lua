@@ -138,15 +138,18 @@ return function()
 	local page2 = Instance.new("Frame")
 	page2.Size = UDim2.new(0, 450, 0, 260)
 	page2.Position = UDim2.new(0.5, -225, 0.5, -150)
-	page2.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	page2.BackgroundColor3 = Color3.fromRGB(30, 30, 30)   
+	page2.BackgroundTransparency = 0.3                   
+	page2.BorderSizePixel = 0                             
 	page2.Visible = false
 	page2.Parent = screenGui
 	
-	-- Smaller Back button (bottom right)
-	local backButton = createButton("< BACK", UDim2.new(1, -100, 1, -40), page2, UDim2.new(0, 80, 0, 30))
+	-- Smaller Back button (bottom right, stays pinned)
+	local backButton = createButton("< BACK", UDim2.new(0, 20, 1, -40), page2, UDim2.new(0, 80, 0, 30))
 	
-	-- Auto Toxic Shake toggle (centered)
-	local toxicShakeButton = createButton("Auto Toxic Shake: OFF", UDim2.new(0.5, -100, 0, 80), page2)
+	-- Auto Toxic Shake toggle (moved higher, smaller font)
+	local toxicShakeButton = createButton("Auto Toxic Shake: OFF", UDim2.new(0.5, -100, 0, 30), page2)
+	toxicShakeButton.TextSize = 16   -- shrink font size
 	local toxicShakeActive = false
 	toxicShakeButton.MouseButton1Click:Connect(function()
 	    toxicShakeActive = not toxicShakeActive
@@ -162,40 +165,41 @@ return function()
 	        end)
 	    end
 	end)
+
+		-- Anti-AFK button (moved higher)
+		local antiAfkButton = createButton("Anti-AFK: Disabled", UDim2.new(0.5, -100, 0, 80), page2)
 	
-	-- Anti-AFK button (centered)
-	local antiAfkButton = createButton("Enable Anti-AFK", UDim2.new(0.5, -100, 0, 140), page2)
 	antiAfkButton.MouseButton1Click:Connect(function()
 	    local VirtualUser = game:service("VirtualUser")
 	    game:service("Players").LocalPlayer.Idled:Connect(function()
 	        VirtualUser:CaptureController()
 	        VirtualUser:ClickButton2(Vector2.new())
 	    end)
-	    print("✅ Anti-AFK armed again")
+	    print("✅ Anti-AFK script executed again")
 	end)
 	
-	-- Endurance Checker label (centered)
+	-- Endurance Checker label (moved higher)
 	local enduranceLabel = Instance.new("TextLabel")
 	enduranceLabel.Size = UDim2.new(0, 300, 0, 40)
-	enduranceLabel.Position = UDim2.new(0.5, -150, 0, 200)
+	enduranceLabel.Position = UDim2.new(0.5, -150, 0, 130)
 	enduranceLabel.Font = Enum.Font.Arcade
 	enduranceLabel.TextSize = 18
 	enduranceLabel.TextColor3 = Color3.new(1, 1, 1)
 	enduranceLabel.BackgroundTransparency = 1
 	enduranceLabel.TextXAlignment = Enum.TextXAlignment.Center
-	enduranceLabel.Text = "Endurance: loading..."
+	enduranceLabel.Text = "Endurance: Loading..."
 	enduranceLabel.Parent = page2
 	
-	-- Toxic Shake Checker label (centered)
+	-- Toxic Shake Checker label (moved higher)
 	local shakeLabel = Instance.new("TextLabel")
 	shakeLabel.Size = UDim2.new(0, 300, 0, 40)
-	shakeLabel.Position = UDim2.new(0.5, -150, 0, 240)
+	shakeLabel.Position = UDim2.new(0.5, -150, 0, 170)
 	shakeLabel.Font = Enum.Font.Arcade
 	shakeLabel.TextSize = 18
 	shakeLabel.TextColor3 = Color3.new(1, 1, 1)
 	shakeLabel.BackgroundTransparency = 1
 	shakeLabel.TextXAlignment = Enum.TextXAlignment.Center
-	shakeLabel.Text = "Toxic Shakes: loading..."
+	shakeLabel.Text = "Toxic Shakes: Loading..."
 	shakeLabel.Parent = page2
 	
 	-- Hook up endurance + shake updates
@@ -243,7 +247,7 @@ return function()
 	    lastPage = "page1"
 	end)
 	
-		-- Minimise / Maximise Logic (affects both pages)
+	-- Minimise / Maximise Logic (affects both pages)
 	local minimized = false
 	local originalSize = page1.Size
 	local originalPos = page1.Position
@@ -257,7 +261,7 @@ return function()
 	        -- Hide both pages
 	        page1.Visible = false
 	        page2.Visible = false
-	        -- Shrink container
+	        -- Shrink container (title bar stays visible)
 	        page1.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, titleBarHeight + 10)
 	        page1.Position = originalPos
 	    else
@@ -271,6 +275,50 @@ return function()
 	        page1.Position = originalPos
 	    end
 	end)
+	
+	-- Make GUI draggable by the title bar (moves title bar + both pages)
+	local UserInputService = game:GetService("UserInputService")
+	
+	local function makeDraggable(dragHandle, targetFrames)
+	    local dragging = false
+	    local dragStart, startPositions = nil, {}
+	
+	    dragHandle.InputBegan:Connect(function(input)
+	        if input.UserInputType == Enum.UserInputType.MouseButton1 
+	        or input.UserInputType == Enum.UserInputType.Touch then
+	            dragging = true
+	            dragStart = input.Position
+	            startPositions = {}
+	            for _, frame in ipairs(targetFrames) do
+	                startPositions[frame] = frame.Position
+	            end
+	        end
+	    end)
+	
+	    dragHandle.InputEnded:Connect(function(input)
+	        if input.UserInputType == Enum.UserInputType.MouseButton1 
+	        or input.UserInputType == Enum.UserInputType.Touch then
+	            dragging = false
+	        end
+	    end)
+	
+	    UserInputService.InputChanged:Connect(function(input)
+	        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement 
+	        or input.UserInputType == Enum.UserInputType.Touch) then
+	            local delta = input.Position - dragStart
+	            for frame, pos in pairs(startPositions) do
+	                frame.Position = UDim2.new(
+	                    pos.X.Scale, pos.X.Offset + delta.X,
+	                    pos.Y.Scale, pos.Y.Offset + delta.Y
+	                )
+	            end
+	        end
+	    end)
+	end
+	
+	-- Apply draggable to title bar, moving everything together
+	makeDraggable(titleBar, {titleBar, page1, page2})
+   
 	
 	-- Force toggle off helper
 	local function forceToggleOff()
@@ -455,7 +503,7 @@ return function()
 	                p2Won = true
 	                local avg = getCycleAverage(2) or (configs[2] and configs[2].cycleDelay) or 0
 	                local delay = avg + 22.5
-	                print(("✅ Player 2 declared winner — restarting after %.2fs (avg=%.3f+22.5)"):format(delay, avg))
+	                print(("⚠️ Player 2 declared winner — restarting after %.2fs (avg=%.3f+22.5)"):format(delay, avg))
 	                restartRole(2, delay)
 	            end
 	        end)
