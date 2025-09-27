@@ -504,11 +504,12 @@ return function()
 	        -- Player 1: detect win
 	        winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
 	            if activeRole ~= 1 then return end
-	            if action == "Play" and type(data) == "table" and data.Name == "WinP1" then
-	                won = true
-	                timeoutElapsed = false
-	                print("✅ Role 1 win detected")
-	                -- NOTE: no timeoutGen increment here
+	            if action == "Play" and type(data) == "table" then
+	                if data.Name == "WinP1" or data.Name == "Win" then
+	                    won = true
+	                    timeoutElapsed = false
+	                    print("✅ Role 1 win detected (event=" .. tostring(data.Name) .. ")")
+	                end
 	            end
 	        end)
 	
@@ -517,7 +518,9 @@ return function()
 	            local startTime = os.clock()
 	            local windowSeconds = 15
 	            while os.clock() - startTime < windowSeconds do
-	                if won or activeRole ~= 1 or myGen ~= timeoutGen then return end
+	                if won or activeRole ~= 1 or myGen ~= timeoutGen then
+	                    return -- exit early if win or role change
+	                end
 	                RunService.Heartbeat:Wait()
 	            end
 	            if not won and activeRole == 1 and myGen == timeoutGen then
@@ -534,13 +537,15 @@ return function()
 	        -- Player 2: restart immediately on win
 	        winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
 	            if activeRole ~= 2 then return end
-	            if action == "Play" and type(data) == "table" and data.Name == "WinP2" then
-	                won = true
-	                timeoutElapsed = false
-	                local avg = getCycleAverage(2) or (configs[2] and configs[2].cycleDelay) or 0
-	                local delay = avg + 22.5
-	                print(("✅ Role 2 win detected — restarting after %.2fs (avg=%.3f+22.5)"):format(delay, avg))
-	                restartRole(2, delay)
+	            if action == "Play" and type(data) == "table" then
+	                if data.Name == "WinP2" or data.Name == "Win" then
+	                    won = true
+	                    timeoutElapsed = false
+	                    local avg = getCycleAverage(2) or (configs[2] and configs[2].cycleDelay) or 0
+	                    local delay = avg + 22.5
+	                    print(("✅ Role 2 win detected — restarting after %.2fs (avg=%.3f+22.5) [event=%s]"):format(delay, avg, tostring(data.Name)))
+	                    restartRole(2, delay)
+	                end
 	            end
 	        end)
 	    end
