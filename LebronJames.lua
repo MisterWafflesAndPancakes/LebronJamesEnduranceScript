@@ -49,14 +49,22 @@ return function()
 	screenGui.ResetOnSpawn = false
 	screenGui.Parent = player:WaitForChild("PlayerGui")
 	
+	-- Main container (acts like a window: title bar + pages inside)
+	local mainContainer = Instance.new("Frame")
+	mainContainer.Size = UDim2.new(0, 450, 0, 300) -- 40 for title + 260 for page
+	mainContainer.Position = UDim2.new(0.5, -225, 0.5, -190)
+	mainContainer.BackgroundTransparency = 0.3
+	mainContainer.BorderSizePixel = 0
+	mainContainer.Parent = screenGui
+	
 	-- Shared Title Bar
 	local titleBar = Instance.new("Frame")
-	titleBar.Size = UDim2.new(0, 450, 0, 40)
-	titleBar.Position = UDim2.new(0.5, -225, 0.5, -190)
+	titleBar.Size = UDim2.new(1, 0, 0, 40)
+	titleBar.Position = UDim2.new(0, 0, 0, 0)
 	titleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 	titleBar.BackgroundTransparency = 0.2
 	titleBar.BorderSizePixel = 0
-	titleBar.Parent = screenGui
+	titleBar.Parent = mainContainer
 	
 	local minimizeButton = Instance.new("TextButton")
 	minimizeButton.Size = UDim2.new(0, 40, 0, 40)
@@ -77,7 +85,7 @@ return function()
 	titleLabel.Font = Enum.Font.Arcade
 	titleLabel.TextSize = 24
 	titleLabel.TextColor3 = Color3.new(1, 1, 1)
-	titleLabel.BackgroundTransparency = 1
+	titleLabel.BackgroundTransparency = 0.2
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Center
 	titleLabel.Parent = titleBar
 	
@@ -99,12 +107,12 @@ return function()
 	
 	-- Page 1
 	local page1 = Instance.new("Frame")
-	page1.Size = UDim2.new(0, 450, 0, 260)
-	page1.Position = UDim2.new(0.5, -225, 0.5, -150)
+	page1.Size = UDim2.new(1, 0, 0, 260)
+	page1.Position = UDim2.new(0, 0, 0, 40) -- sits below title bar
 	page1.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 	page1.BackgroundTransparency = 0.3
 	page1.BorderSizePixel = 0
-	page1.Parent = screenGui
+	page1.Parent = mainContainer
 	
 	local soloButton = createButton("SOLO MODE", UDim2.new(0, 20, 0, 60), page1)
 	local onOffButton = createButton("OFF", UDim2.new(0, 230, 0, 60), page1)
@@ -136,20 +144,20 @@ return function()
 	
 	-- Page 2
 	local page2 = Instance.new("Frame")
-	page2.Size = UDim2.new(0, 450, 0, 260)
-	page2.Position = UDim2.new(0.5, -225, 0.5, -150)
-	page2.BackgroundColor3 = Color3.fromRGB(30, 30, 30)   
-	page2.BackgroundTransparency = 0.3                   
-	page2.BorderSizePixel = 0                             
+	page2.Size = UDim2.new(1, 0, 0, 260)
+	page2.Position = UDim2.new(0, 0, 0, 40)
+	page2.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	page2.BackgroundTransparency = 0.3
+	page2.BorderSizePixel = 0
 	page2.Visible = false
-	page2.Parent = screenGui
+	page2.Parent = mainContainer
 	
-	-- Smaller Back button (bottom right, stays pinned)
+	-- Back button pinned bottom-left
 	local backButton = createButton("< BACK", UDim2.new(0, 20, 1, -40), page2, UDim2.new(0, 80, 0, 30))
 	
-	-- Auto Toxic Shake toggle (moved higher, smaller font)
+	-- Auto Toxic Shake toggle
 	local toxicShakeButton = createButton("Auto Toxic Shake: OFF", UDim2.new(0.5, -100, 0, 30), page2)
-	toxicShakeButton.TextSize = 16   -- shrink font size
+	toxicShakeButton.TextSize = 16
 	local toxicShakeActive = false
 	toxicShakeButton.MouseButton1Click:Connect(function()
 	    toxicShakeActive = not toxicShakeActive
@@ -165,10 +173,9 @@ return function()
 	        end)
 	    end
 	end)
-
-		-- Anti-AFK button (moved higher)
-		local antiAfkButton = createButton("Anti-AFK: Disabled", UDim2.new(0.5, -100, 0, 80), page2)
 	
+	-- Anti-AFK button
+	local antiAfkButton = createButton("Run Anti-AFK", UDim2.new(0.5, -100, 0, 80), page2)
 	antiAfkButton.MouseButton1Click:Connect(function()
 	    local VirtualUser = game:service("VirtualUser")
 	    game:service("Players").LocalPlayer.Idled:Connect(function()
@@ -178,7 +185,7 @@ return function()
 	    print("✅ Anti-AFK script executed again")
 	end)
 	
-	-- Endurance Checker label (moved higher)
+	-- Endurance Checker label
 	local enduranceLabel = Instance.new("TextLabel")
 	enduranceLabel.Size = UDim2.new(0, 300, 0, 40)
 	enduranceLabel.Position = UDim2.new(0.5, -150, 0, 130)
@@ -190,7 +197,7 @@ return function()
 	enduranceLabel.Text = "Endurance: Loading..."
 	enduranceLabel.Parent = page2
 	
-	-- Toxic Shake Checker label (moved higher)
+	-- Toxic Shake Checker label
 	local shakeLabel = Instance.new("TextLabel")
 	shakeLabel.Size = UDim2.new(0, 300, 0, 40)
 	shakeLabel.Position = UDim2.new(0.5, -150, 0, 170)
@@ -202,55 +209,23 @@ return function()
 	shakeLabel.Text = "Toxic Shakes: Loading..."
 	shakeLabel.Parent = page2
 	
-	-- Hook up endurance + shake updates
-	task.spawn(function()
-	    local playerInfo = workspace:WaitForChild("Player_Information"):WaitForChild(player.Name)
-	    local statsFolder = playerInfo:WaitForChild("Stats")
-	    local enduranceFolder = statsFolder:WaitForChild("Endurance")
-	    local level = enduranceFolder:WaitForChild("Level")
-	    local xp = enduranceFolder:WaitForChild("XP")
-	
-	    local function updateEndurance()
-	        enduranceLabel.Text = string.format("Endurance Lv %d | XP %d", level.Value, xp.Value)
-	    end
-	    updateEndurance()
-	    level:GetPropertyChangedSignal("Value"):Connect(updateEndurance)
-	    xp:GetPropertyChangedSignal("Value"):Connect(updateEndurance)
-	
-	    local drinksFolder = playerInfo:WaitForChild("Inventory"):WaitForChild("Drinks")
-	    local function updateShakes()
-	        local count = 0
-	        for _, item in ipairs(drinksFolder:GetChildren()) do
-	            if item.Name == "T" then
-	                count += 1
-	            end
-	        end
-	        shakeLabel.Text = "Toxic Shakes: " .. count
-	    end
-	    updateShakes()
-	    drinksFolder.ChildAdded:Connect(updateShakes)
-	    drinksFolder.ChildRemoved:Connect(updateShakes)
-	end)
-	
-	-- Page switching logic with lastPage tracking
+	-- Page switching
 	local lastPage = "page1"
-	
 	nextPageButton.MouseButton1Click:Connect(function()
 	    page1.Visible = false
 	    page2.Visible = true
 	    lastPage = "page2"
 	end)
-	
 	backButton.MouseButton1Click:Connect(function()
 	    page2.Visible = false
 	    page1.Visible = true
 	    lastPage = "page1"
 	end)
 	
-	-- Minimise / Maximise Logic (affects both pages)
+	-- Minimise / Maximise Logic (affects the whole container)
 	local minimized = false
-	local originalSize = page1.Size
-	local originalPos = page1.Position
+	local originalSize = mainContainer.Size
+	local originalPos = mainContainer.Position
 	local titleBarHeight = titleBar.Size.Y.Offset
 	
 	minimizeButton.MouseButton1Click:Connect(function()
@@ -261,9 +236,9 @@ return function()
 	        -- Hide both pages
 	        page1.Visible = false
 	        page2.Visible = false
-	        -- Shrink container (title bar stays visible)
-	        page1.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, titleBarHeight + 10)
-	        page1.Position = originalPos
+	        -- Shrink container to just the title bar
+	        mainContainer.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, titleBarHeight + 10)
+	        mainContainer.Position = originalPos
 	    else
 	        -- Restore whichever page was last active
 	        if lastPage == "page2" then
@@ -271,12 +246,12 @@ return function()
 	        else
 	            page1.Visible = true
 	        end
-	        page1.Size = originalSize
-	        page1.Position = originalPos
+	        mainContainer.Size = originalSize
+	        mainContainer.Position = originalPos
 	    end
 	end)
 	
-	-- Make GUI draggable by the title bar (moves title bar + both pages)
+	-- Make GUI draggable by the title bar (moves the whole container)
 	local UserInputService = game:GetService("UserInputService")
 	
 	local function makeDraggable(dragHandle, targetFrames)
@@ -316,8 +291,8 @@ return function()
 	    end)
 	end
 	
-	-- Apply draggable to title bar, moving everything together
-	makeDraggable(titleBar, {titleBar, page1, page2})
+	-- Apply draggable to the title bar, moving the whole container
+	makeDraggable(titleBar, {mainContainer})
    
 	
 	-- Force toggle off helper
