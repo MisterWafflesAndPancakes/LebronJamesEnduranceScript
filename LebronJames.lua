@@ -52,7 +52,8 @@ return function()
 	local mainContainer = Instance.new("Frame")
 	mainContainer.Size = UDim2.new(0, 450, 0, 300) -- 40 for title + 260 for page
 	mainContainer.Position = UDim2.new(0.5, -225, 0.5, -190)
-	mainContainer.BackgroundTransparency = 0.6
+	mainContainer.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+	mainContainer.BackgroundTransparency = 0.25
 	mainContainer.BorderSizePixel = 0
 	mainContainer.Parent = screenGui
 	
@@ -60,8 +61,8 @@ return function()
 	local titleBar = Instance.new("Frame")
 	titleBar.Size = UDim2.new(1, 0, 0, 40)
 	titleBar.Position = UDim2.new(0, 0, 0, 0)
-	titleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-	titleBar.BackgroundTransparency = 0.6
+	titleBar.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+	titleBar.BackgroundTransparency = 0.25
 	titleBar.BorderSizePixel = 0
 	titleBar.Parent = mainContainer
 	
@@ -73,7 +74,10 @@ return function()
 	minimizeButton.Font = Enum.Font.Arcade
 	minimizeButton.TextSize = 24
 	minimizeButton.TextColor3 = Color3.new(1, 1, 1)
-	minimizeButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+	minimizeButton.TextStrokeTransparency = 0.8
+	minimizeButton.TextStrokeColor3 = Color3.fromRGB(0,0,0)
+	minimizeButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+	minimizeButton.BackgroundTransparency = 0.25
 	minimizeButton.BorderSizePixel = 0
 	minimizeButton.Parent = titleBar
 	
@@ -84,32 +88,38 @@ return function()
 	titleLabel.Font = Enum.Font.Arcade
 	titleLabel.TextSize = 24
 	titleLabel.TextColor3 = Color3.new(1, 1, 1)
-	titleLabel.BackgroundTransparency = 1 -- ✅ no box behind text
+	titleLabel.TextStrokeTransparency = 0.8
+	titleLabel.TextStrokeColor3 = Color3.fromRGB(0,0,0)
+	titleLabel.BackgroundTransparency = 1
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Center
 	titleLabel.Parent = titleBar
 	
-	-- Utility to create buttons
+	-- Utility to create buttons (darker unified style)
 	local function createButton(text, position, parent, size)
 	    local button = Instance.new("TextButton")
 	    button.Size = size or UDim2.new(0, 200, 0, 40)
 	    button.Position = position
 	    button.Text = text
-	    button.BackgroundColor3 = Color3.fromRGB(100, 170, 255)
+	    button.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+	    button.BackgroundTransparency = 0.25
 	    button.TextColor3 = Color3.new(1, 1, 1)
+	    button.TextStrokeTransparency = 0.8
+	    button.TextStrokeColor3 = Color3.fromRGB(0,0,0)
 	    button.Font = Enum.Font.Arcade
 	    button.TextSize = 20
 	    button.Active = true
 	    button.Selectable = true
+	    button.BorderSizePixel = 0
 	    button.Parent = parent
 	    return button
 	end
 	
 	-- Page 1
 	local page1 = Instance.new("Frame")
-	page1.Position = UDim2.new(0, 0, 0, 0)   -- ✅ flush under the bar
-	page1.Size = UDim2.new(1, 0, 0, 260)     -- keep height so total = 300
-	page1.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-	page1.BackgroundTransparency = 0.6
+	page1.Position = UDim2.new(0, 0, 0, 0)
+	page1.Size = UDim2.new(1, 0, 0, 260)
+	page1.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+	page1.BackgroundTransparency = 0.25
 	page1.BorderSizePixel = 0
 	page1.Parent = mainContainer
 	
@@ -123,7 +133,7 @@ return function()
 	usernameBox.Font = Enum.Font.Arcade
 	usernameBox.TextSize = 18
 	usernameBox.TextColor3 = Color3.new(1, 1, 1)
-	usernameBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	usernameBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45) -- solid for readability
 	usernameBox.BorderSizePixel = 0
 	usernameBox.Parent = page1
 	
@@ -134,7 +144,7 @@ return function()
 	roleBox.Font = Enum.Font.Arcade
 	roleBox.TextSize = 18
 	roleBox.TextColor3 = Color3.new(1, 1, 1)
-	roleBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	roleBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45) -- solid for readability
 	roleBox.BorderSizePixel = 0
 	roleBox.Parent = page1
 	
@@ -145,8 +155,8 @@ return function()
 	local page2 = Instance.new("Frame")
 	page2.Position = UDim2.new(0, 0, 0, 0)
 	page2.Size = UDim2.new(1, 0, 0, 260)
-	page2.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-	page2.BackgroundTransparency = 0.6
+	page2.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+	page2.BackgroundTransparency = 0.25
 	page2.BorderSizePixel = 0
 	page2.Visible = false
 	page2.Parent = mainContainer
@@ -176,8 +186,8 @@ return function()
 	-- Anti-AFK button
 	local antiAfkButton = createButton("Run Anti-AFK", UDim2.new(0.5, -100, 0, 80), page2)
 	antiAfkButton.MouseButton1Click:Connect(function()
-	    local VirtualUser = game:service("VirtualUser")
-	    game:service("Players").LocalPlayer.Idled:Connect(function()
+	    local VirtualUser = game:GetService("VirtualUser")
+	    game:GetService("Players").LocalPlayer.Idled:Connect(function()
 	        VirtualUser:CaptureController()
 	        VirtualUser:ClickButton2(Vector2.new())
 	    end)
@@ -191,6 +201,8 @@ return function()
 	enduranceLabel.Font = Enum.Font.Arcade
 	enduranceLabel.TextSize = 18
 	enduranceLabel.TextColor3 = Color3.new(1, 1, 1)
+	enduranceLabel.TextStrokeTransparency = 0.8
+	enduranceLabel.TextStrokeColor3 = Color3.fromRGB(0,0,0)
 	enduranceLabel.BackgroundTransparency = 1
 	enduranceLabel.TextXAlignment = Enum.TextXAlignment.Center
 	enduranceLabel.Text = "Endurance: not found"
@@ -203,6 +215,8 @@ return function()
 	shakeLabel.Font = Enum.Font.Arcade
 	shakeLabel.TextSize = 18
 	shakeLabel.TextColor3 = Color3.new(1, 1, 1)
+	shakeLabel.TextStrokeTransparency = 0.8
+	shakeLabel.TextStrokeColor3 = Color3.fromRGB(0,0,0)
 	shakeLabel.BackgroundTransparency = 1
 	shakeLabel.TextXAlignment = Enum.TextXAlignment.Center
 	shakeLabel.Text = "Toxic Shakes: not found"
@@ -295,7 +309,7 @@ return function()
 	makeDraggable(mainContainer, {mainContainer})
 	makeDraggable(page1, {mainContainer})
 	makeDraggable(page2, {mainContainer})
-		
+	
 	-- Live stat updates for Endurance and Toxic Shakes
 	task.spawn(function()
 	    local playerInfo = workspace:FindFirstChild("Player_Information")
@@ -325,24 +339,24 @@ return function()
 	    else
 	        shakeLabel.Text = "Toxic Shakes: not found"
 	    end
-	
-	    -- Endurance
-	    local statsFolder = myStats:FindFirstChild("Stats")
-	    local enduranceFolder = statsFolder and statsFolder:FindFirstChild("Endurance")
-	    local level = enduranceFolder and enduranceFolder:FindFirstChild("Level")
-	    local xp = enduranceFolder and enduranceFolder:FindFirstChild("XP")
-	
-	    if level and xp then
-	        local function updateEndurance()
-	            enduranceLabel.Text = string.format("Endurance Lv %d | XP %d", level.Value, xp.Value)
-	        end
-	        updateEndurance()
-	        level:GetPropertyChangedSignal("Value"):Connect(updateEndurance)
-	        xp:GetPropertyChangedSignal("Value"):Connect(updateEndurance)
-	    else
-	        enduranceLabel.Text = "Endurance: not found"
-	    end
-	end)
+
+    -- Endurance
+    local statsFolder = myStats:FindFirstChild("Stats")
+    local enduranceFolder = statsFolder and statsFolder:FindFirstChild("Endurance")
+    local level = enduranceFolder and enduranceFolder:FindFirstChild("Level")
+    local xp = enduranceFolder and enduranceFolder:FindFirstChild("XP")
+
+    if level and xp then
+        local function updateEndurance()
+            enduranceLabel.Text = string.format("Endurance Lv %d | XP %d", level.Value, xp.Value)
+        end
+        updateEndurance()
+        level:GetPropertyChangedSignal("Value"):Connect(updateEndurance)
+        xp:GetPropertyChangedSignal("Value"):Connect(updateEndurance)
+    else
+        enduranceLabel.Text = "Endurance: not found"
+    end
+end)
    
 	-- Force toggle off helper
 	local function forceToggleOff()
