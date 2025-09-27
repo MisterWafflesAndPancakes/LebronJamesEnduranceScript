@@ -53,7 +53,7 @@ return function()
 	local mainContainer = Instance.new("Frame")
 	mainContainer.Size = UDim2.new(0, 450, 0, 300) -- 40 for title + 260 for page
 	mainContainer.Position = UDim2.new(0.5, -225, 0.5, -190)
-	mainContainer.BackgroundTransparency = 0.3
+	mainContainer.BackgroundTransparency = 0.2
 	mainContainer.BorderSizePixel = 0
 	mainContainer.Parent = screenGui
 	
@@ -110,7 +110,7 @@ return function()
 	page1.Size = UDim2.new(1, 0, 0, 260)
 	page1.Position = UDim2.new(0, 0, 0, 40) -- sits below title bar
 	page1.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-	page1.BackgroundTransparency = 0.3
+	page1.BackgroundTransparency = 0.2
 	page1.BorderSizePixel = 0
 	page1.Parent = mainContainer
 	
@@ -147,7 +147,7 @@ return function()
 	page2.Size = UDim2.new(1, 0, 0, 260)
 	page2.Position = UDim2.new(0, 0, 0, 40)
 	page2.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-	page2.BackgroundTransparency = 0.3
+	page2.BackgroundTransparency = 0.2
 	page2.BorderSizePixel = 0
 	page2.Visible = false
 	page2.Parent = mainContainer
@@ -194,7 +194,7 @@ return function()
 	enduranceLabel.TextColor3 = Color3.new(1, 1, 1)
 	enduranceLabel.BackgroundTransparency = 1
 	enduranceLabel.TextXAlignment = Enum.TextXAlignment.Center
-	enduranceLabel.Text = "Endurance: Loading..."
+	enduranceLabel.Text = "Endurance: not found"
 	enduranceLabel.Parent = page2
 	
 	-- Toxic Shake Checker label
@@ -206,7 +206,7 @@ return function()
 	shakeLabel.TextColor3 = Color3.new(1, 1, 1)
 	shakeLabel.BackgroundTransparency = 1
 	shakeLabel.TextXAlignment = Enum.TextXAlignment.Center
-	shakeLabel.Text = "Toxic Shakes: Loading..."
+	shakeLabel.Text = "Toxic Shakes: not found"
 	shakeLabel.Parent = page2
 	
 	-- Page switching
@@ -293,8 +293,55 @@ return function()
 	
 	-- Apply draggable to the title bar, moving the whole container
 	makeDraggable(titleBar, {mainContainer})
-   
 	
+	-- Live stat updates for Endurance and Toxic Shakes
+	task.spawn(function()
+	    local playerInfo = workspace:FindFirstChild("Player_Information")
+	    local myStats = playerInfo and playerInfo:FindFirstChild(player.Name)
+	
+	    if not myStats then
+	        enduranceLabel.Text = "Endurance: not found"
+	        shakeLabel.Text = "Toxic Shakes: not found"
+	        return
+	    end
+	
+	    -- Toxic Shakes
+	    local drinksFolder = myStats:FindFirstChild("Inventory") and myStats.Inventory:FindFirstChild("Drinks")
+	    if drinksFolder then
+	        local function updateShakes()
+	            local count = 0
+	            for _, item in ipairs(drinksFolder:GetChildren()) do
+	                if item.Name == "T" then
+	                    count += 1
+	                end
+	            end
+	            shakeLabel.Text = "Toxic Shakes: " .. count
+	        end
+	        updateShakes()
+	        drinksFolder.ChildAdded:Connect(updateShakes)
+	        drinksFolder.ChildRemoved:Connect(updateShakes)
+	    else
+	        shakeLabel.Text = "Toxic Shakes: not found"
+	    end
+	
+	    -- Endurance
+	    local statsFolder = myStats:FindFirstChild("Stats")
+	    local enduranceFolder = statsFolder and statsFolder:FindFirstChild("Endurance")
+	    local level = enduranceFolder and enduranceFolder:FindFirstChild("Level")
+	    local xp = enduranceFolder and enduranceFolder:FindFirstChild("XP")
+	
+	    if level and xp then
+	        local function updateEndurance()
+	            enduranceLabel.Text = string.format("Endurance Lv %d | XP %d", level.Value, xp.Value)
+	        end
+	        updateEndurance()
+	        level:GetPropertyChangedSignal("Value"):Connect(updateEndurance)
+	        xp:GetPropertyChangedSignal("Value"):Connect(updateEndurance)
+	    else
+	        enduranceLabel.Text = "Endurance: not found"
+	    end
+	end)
+   
 	-- Force toggle off helper
 	local function forceToggleOff()
 	    -- Disconnect loop + win listeners
