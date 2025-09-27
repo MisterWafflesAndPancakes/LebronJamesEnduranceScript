@@ -53,7 +53,7 @@ return function()
 	local mainContainer = Instance.new("Frame")
 	mainContainer.Size = UDim2.new(0, 450, 0, 300) -- 40 for title + 260 for page
 	mainContainer.Position = UDim2.new(0.5, -225, 0.5, -190)
-	mainContainer.BackgroundTransparency = 0.2
+	mainContainer.BackgroundTransparency = 0.4
 	mainContainer.BorderSizePixel = 0
 	mainContainer.Parent = screenGui
 	
@@ -62,7 +62,7 @@ return function()
 	titleBar.Size = UDim2.new(1, 0, 0, 40)
 	titleBar.Position = UDim2.new(0, 0, 0, 0)
 	titleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-	titleBar.BackgroundTransparency = 0.2
+	titleBar.BackgroundTransparency = 0.4
 	titleBar.BorderSizePixel = 0
 	titleBar.Parent = mainContainer
 	
@@ -85,7 +85,7 @@ return function()
 	titleLabel.Font = Enum.Font.Arcade
 	titleLabel.TextSize = 24
 	titleLabel.TextColor3 = Color3.new(1, 1, 1)
-	titleLabel.BackgroundTransparency = 0.2
+	titleLabel.BackgroundTransparency = 1 -- ✅ no box behind text
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Center
 	titleLabel.Parent = titleBar
 	
@@ -108,9 +108,9 @@ return function()
 	-- Page 1
 	local page1 = Instance.new("Frame")
 	page1.Size = UDim2.new(1, 0, 0, 260)
-	page1.Position = UDim2.new(0, 0, 0, 40) -- sits below title bar
+	page1.Position = UDim2.new(0, 0, 0, 40) -- ✅ sits directly under title bar
 	page1.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-	page1.BackgroundTransparency = 0.2
+	page1.BackgroundTransparency = 0.4
 	page1.BorderSizePixel = 0
 	page1.Parent = mainContainer
 	
@@ -145,9 +145,9 @@ return function()
 	-- Page 2
 	local page2 = Instance.new("Frame")
 	page2.Size = UDim2.new(1, 0, 0, 260)
-	page2.Position = UDim2.new(0, 0, 0, 40)
+	page2.Position = UDim2.new(0, 0, 0, 40) -- ✅ flush under title bar
 	page2.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-	page2.BackgroundTransparency = 0.2
+	page2.BackgroundTransparency = 0.4
 	page2.BorderSizePixel = 0
 	page2.Visible = false
 	page2.Parent = mainContainer
@@ -291,9 +291,12 @@ return function()
 	    end)
 	end
 	
-	-- Apply draggable to the title bar, moving the whole container
+	-- Apply draggable to both the title bar and the main container (so you can grab anywhere)
 	makeDraggable(titleBar, {mainContainer})
-	
+	makeDraggable(mainContainer, {mainContainer})
+	makeDraggable(page1, {mainContainer})
+	makeDraggable(page2, {mainContainer})
+		
 	-- Live stat updates for Endurance and Toxic Shakes
 	task.spawn(function()
 	    local playerInfo = workspace:FindFirstChild("Player_Information")
