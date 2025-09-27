@@ -64,6 +64,7 @@ return function()
 	titleBar.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 	titleBar.BackgroundTransparency = 0.25
 	titleBar.BorderSizePixel = 0
+	titleBar.ZIndex = 2
 	titleBar.Parent = mainContainer
 	
 	local minimizeButton = Instance.new("TextButton")
@@ -79,6 +80,7 @@ return function()
 	minimizeButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25) -- unified with container
 	minimizeButton.BackgroundTransparency = 0.25
 	minimizeButton.BorderSizePixel = 0
+	minimizeButton.ZIndex = 3
 	minimizeButton.Parent = titleBar
 	
 	local titleLabel = Instance.new("TextLabel")
@@ -92,6 +94,7 @@ return function()
 	titleLabel.TextStrokeColor3 = Color3.fromRGB(0,0,0)
 	titleLabel.BackgroundTransparency = 1 -- no box behind text
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Center
+	titleLabel.ZIndex = 3
 	titleLabel.Parent = titleBar
 	
 	-- Utility to create buttons (darker unified style)
@@ -110,17 +113,19 @@ return function()
 	    button.Active = true
 	    button.Selectable = true
 	    button.BorderSizePixel = 0
+	    button.ZIndex = 1
 	    button.Parent = parent
 	    return button
 	end
 	
-	-- Page 1
+	-- Page 1 (offset below title bar)
 	local page1 = Instance.new("Frame")
-	page1.Position = UDim2.new(0, 0, 0, 0)
-	page1.Size = UDim2.new(1, 0, 0, 260)
+	page1.Position = UDim2.new(0, 0, 0, 40) -- push down below title bar
+	page1.Size = UDim2.new(1, 0, 0, 260)    -- 300 total - 40 bar = 260
 	page1.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 	page1.BackgroundTransparency = 0.25
 	page1.BorderSizePixel = 0
+	page1.ZIndex = 1
 	page1.Parent = mainContainer
 	
 	local soloButton = createButton("SOLO MODE", UDim2.new(0, 20, 0, 60), page1)
@@ -151,14 +156,15 @@ return function()
 	-- Smaller Next button (bottom right)
 	local nextPageButton = createButton("NEXT >", UDim2.new(1, -100, 1, -40), page1, UDim2.new(0, 80, 0, 30))
 	
-	-- Page 2
+	-- Page 2 (same offset)
 	local page2 = Instance.new("Frame")
-	page2.Position = UDim2.new(0, 0, 0, 0)
+	page2.Position = UDim2.new(0, 0, 0, 40)
 	page2.Size = UDim2.new(1, 0, 0, 260)
 	page2.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 	page2.BackgroundTransparency = 0.25
 	page2.BorderSizePixel = 0
 	page2.Visible = false
+	page2.ZIndex = 1
 	page2.Parent = mainContainer
 	
 	-- Back button pinned bottom-left
@@ -206,6 +212,7 @@ return function()
 	enduranceLabel.BackgroundTransparency = 1
 	enduranceLabel.TextXAlignment = Enum.TextXAlignment.Center
 	enduranceLabel.Text = "Endurance: not found"
+	enduranceLabel.ZIndex = 2
 	enduranceLabel.Parent = page2
 	
 	-- Toxic Shake Checker label
@@ -220,6 +227,7 @@ return function()
 	shakeLabel.BackgroundTransparency = 1
 	shakeLabel.TextXAlignment = Enum.TextXAlignment.Center
 	shakeLabel.Text = "Toxic Shakes: not found"
+	shakeLabel.ZIndex = 2
 	shakeLabel.Parent = page2
 	
 	-- Page switching
@@ -250,7 +258,7 @@ return function()
 	        page1.Visible = false
 	        page2.Visible = false
 	        -- Shrink container to just the title bar
-	        mainContainer.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, titleBarHeight + 10)
+	        mainContainer.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, titleBarHeight)
 	        mainContainer.Position = originalPos
 	    else
 	        -- Restore whichever page was last active
@@ -339,24 +347,24 @@ return function()
 	    else
 	        shakeLabel.Text = "Toxic Shakes: not found"
 	    end
-
-    -- Endurance
-    local statsFolder = myStats:FindFirstChild("Stats")
-    local enduranceFolder = statsFolder and statsFolder:FindFirstChild("Endurance")
-    local level = enduranceFolder and enduranceFolder:FindFirstChild("Level")
-    local xp = enduranceFolder and enduranceFolder:FindFirstChild("XP")
-
-    if level and xp then
-        local function updateEndurance()
-            enduranceLabel.Text = string.format("Endurance Lv %d | XP %d", level.Value, xp.Value)
-        end
-        updateEndurance()
-        level:GetPropertyChangedSignal("Value"):Connect(updateEndurance)
-        xp:GetPropertyChangedSignal("Value"):Connect(updateEndurance)
-    else
-        enduranceLabel.Text = "Endurance: not found"
-    end
-end)
+	
+	    -- Endurance
+	    local statsFolder = myStats:FindFirstChild("Stats")
+	    local enduranceFolder = statsFolder and statsFolder:FindFirstChild("Endurance")
+	    local level = enduranceFolder and enduranceFolder:FindFirstChild("Level")
+	    local xp = enduranceFolder and enduranceFolder:FindFirstChild("XP")
+	
+	    if level and xp then
+	        local function updateEndurance()
+	            enduranceLabel.Text = string.format("Endurance Lv %d | XP %d", level.Value, xp.Value)
+	        end
+	        updateEndurance()
+	        level:GetPropertyChangedSignal("Value"):Connect(updateEndurance)
+	        xp:GetPropertyChangedSignal("Value"):Connect(updateEndurance)
+	    else
+	        enduranceLabel.Text = "Endurance: not found"
+	    end
+	end)
    
 	-- Force toggle off helper
 	local function forceToggleOff()
