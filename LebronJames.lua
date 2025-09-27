@@ -49,14 +49,14 @@ return function()
 	screenGui.ResetOnSpawn = false
 	screenGui.Parent = player:WaitForChild("PlayerGui")
 	
-	-- Main Container Frame
-	local mainFrame = Instance.new("Frame")
-	mainFrame.Size = UDim2.new(0, 450, 0, 300)
-	mainFrame.Position = UDim2.new(0.5, -225, 0.5, -150)
-	mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-	mainFrame.BackgroundTransparency = 0.3
-	mainFrame.BorderSizePixel = 0
-	mainFrame.Parent = screenGui
+	-- Main Container Frame (Page 1)
+	local page1 = Instance.new("Frame")
+	page1.Size = UDim2.new(0, 450, 0, 300)
+	page1.Position = UDim2.new(0.5, -225, 0.5, -150)
+	page1.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	page1.BackgroundTransparency = 0.3
+	page1.BorderSizePixel = 0
+	page1.Parent = screenGui
 	
 	-- Make GUI draggable
 	local function makeDraggable(gui)
@@ -86,10 +86,10 @@ return function()
 	        end
 	    end)
 	end
-	makeDraggable(mainFrame)
+	makeDraggable(page1)
 	
 	-- Utility to create buttons
-	local function createButton(text, position)
+	local function createButton(text, position, parent)
 	    local button = Instance.new("TextButton")
 	    button.Size = UDim2.new(0, 200, 0, 40)
 	    button.Position = position
@@ -100,15 +100,14 @@ return function()
 	    button.TextSize = 20
 	    button.Active = true
 	    button.Selectable = true
-	    button.Parent = mainFrame
+	    button.Parent = parent
 	    return button
 	end
 	
-	-- GUI Elements
-	local soloButton = createButton("SOLO MODE", UDim2.new(0, 20, 0, 60))
-	local onOffButton = createButton("OFF", UDim2.new(0, 230, 0, 60))
+	-- Page 1 Elements
+	local soloButton = createButton("SOLO MODE", UDim2.new(0, 20, 0, 60), page1)
+	local onOffButton = createButton("OFF", UDim2.new(0, 230, 0, 60), page1)
 	
-	-- Username Text Box
 	local usernameBox = Instance.new("TextBox")
 	usernameBox.Size = UDim2.new(0, 200, 0, 40)
 	usernameBox.Position = UDim2.new(0, 20, 0, 120)
@@ -118,9 +117,8 @@ return function()
 	usernameBox.TextColor3 = Color3.new(1, 1, 1)
 	usernameBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
 	usernameBox.BorderSizePixel = 0
-	usernameBox.Parent = mainFrame
+	usernameBox.Parent = page1
 	
-	-- Role Text Box
 	local roleBox = Instance.new("TextBox")
 	roleBox.Size = UDim2.new(0, 200, 0, 40)
 	roleBox.Position = UDim2.new(0, 230, 0, 120)
@@ -130,13 +128,13 @@ return function()
 	roleBox.TextColor3 = Color3.new(1, 1, 1)
 	roleBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
 	roleBox.BorderSizePixel = 0
-	roleBox.Parent = mainFrame
+	roleBox.Parent = page1
 	
 	-- Title Bar Container
 	local titleBar = Instance.new("Frame")
 	titleBar.Size = UDim2.new(1, 0, 0, 40)
 	titleBar.BackgroundTransparency = 1
-	titleBar.Parent = mainFrame
+	titleBar.Parent = page1
 	
 	-- Minimise Button
 	local minimizeButton = Instance.new("TextButton")
@@ -165,30 +163,150 @@ return function()
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Center
 	titleLabel.Parent = titleBar
 	
-	-- Minimise / Maximise Logic
+	-- Next Page Button (bottom right)
+	local nextPageButton = createButton("NEXT >", UDim2.new(1, -220, 1, -50), page1)
+	
+	-- Page 2
+	local page2 = Instance.new("Frame")
+	page2.Size = UDim2.new(0, 450, 0, 300)
+	page2.Position = UDim2.new(0.5, -225, 0.5, -150)
+	page2.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	page2.Visible = false
+	page2.Parent = screenGui
+	
+	-- Page 2 Header Label
+	local page2Header = Instance.new("TextLabel")
+	page2Header.Size = UDim2.new(1, -40, 0, 40)
+	page2Header.Position = UDim2.new(0, 20, 0, 50)
+	page2Header.Font = Enum.Font.Arcade
+	page2Header.TextSize = 22
+	page2Header.TextColor3 = Color3.new(1, 1, 1)
+	page2Header.BackgroundTransparency = 1
+	page2Header.TextXAlignment = Enum.TextXAlignment.Center
+	page2Header.Text = "Utilities"
+	page2Header.Parent = page2
+	
+	-- Back Button (bottom right)
+	local backButton = createButton("< BACK", UDim2.new(1, -220, 1, -50), page2)
+	
+	-- Auto Toxic Shake toggle (centered)
+	local toxicShakeButton = createButton("Auto Toxic Shake: OFF", UDim2.new(0.5, -100, 0, 80), page2)
+	local toxicShakeActive = false
+	toxicShakeButton.MouseButton1Click:Connect(function()
+	    toxicShakeActive = not toxicShakeActive
+	    toxicShakeButton.Text = toxicShakeActive and "Auto Toxic Shake: ON" or "Auto Toxic Shake: OFF"
+	    if toxicShakeActive then
+	        task.spawn(function()
+	            while toxicShakeActive do
+	                pcall(function()
+	                    game.ReplicatedStorage["Drink_Shake"]:InvokeServer("Toxic")
+	                end)
+	                task.wait(2)
+	            end
+	        end)
+	    end
+	end)
+	
+	-- Anti-AFK button (centered)
+	local antiAfkButton = createButton("Enable Anti-AFK", UDim2.new(0.5, -100, 0, 140), page2)
+	antiAfkButton.MouseButton1Click:Connect(function()
+	    local VirtualUser = game:service("VirtualUser")
+	    game:service("Players").LocalPlayer.Idled:Connect(function()
+	        VirtualUser:CaptureController()
+	        VirtualUser:ClickButton2(Vector2.new())
+	    end)
+	    print("✅ Anti-AFK armed again")
+	end)
+	
+	-- Endurance Checker label (centered)
+	local enduranceLabel = Instance.new("TextLabel")
+	enduranceLabel.Size = UDim2.new(0, 300, 0, 40)
+	enduranceLabel.Position = UDim2.new(0.5, -150, 0, 200)
+	enduranceLabel.Font = Enum.Font.Arcade
+	enduranceLabel.TextSize = 18
+	enduranceLabel.TextColor3 = Color3.new(1, 1, 1)
+	enduranceLabel.BackgroundTransparency = 1
+	enduranceLabel.TextXAlignment = Enum.TextXAlignment.Center
+	enduranceLabel.Text = "Endurance: loading..."
+	enduranceLabel.Parent = page2
+	
+	-- Toxic Shake Checker label (centered)
+	local shakeLabel = Instance.new("TextLabel")
+	shakeLabel.Size = UDim2.new(0, 300, 0, 40)
+	shakeLabel.Position = UDim2.new(0.5, -150, 0, 240)
+	shakeLabel.Font = Enum.Font.Arcade
+	shakeLabel.TextSize = 18
+	shakeLabel.TextColor3 = Color3.new(1, 1, 1)
+	shakeLabel.BackgroundTransparency = 1
+	shakeLabel.TextXAlignment = Enum.TextXAlignment.Center
+	shakeLabel.Text = "Toxic Shakes: loading..."
+	shakeLabel.Parent = page2
+	
+	-- Hook up endurance + shake updates
+	task.spawn(function()
+	    local playerInfo = workspace:WaitForChild("Player_Information"):WaitForChild(player.Name)
+	    local statsFolder = playerInfo:WaitForChild("Stats")
+	    local enduranceFolder = statsFolder:WaitForChild("Endurance")
+	    local level = enduranceFolder:WaitForChild("Level")
+	    local xp = enduranceFolder:WaitForChild("XP")
+	
+	    local function updateEndurance()
+	        enduranceLabel.Text = string.format("Endurance Lv %d | XP %d", level.Value, xp.Value)
+	    end
+	    updateEndurance()
+	    level:GetPropertyChangedSignal("Value"):Connect(updateEndurance)
+	    xp:GetPropertyChangedSignal("Value"):Connect(updateEndurance)
+	
+	    local drinksFolder = playerInfo:WaitForChild("Inventory"):WaitForChild("Drinks")
+	    local function updateShakes()
+	        local count = 0
+	        for _, item in ipairs(drinksFolder:GetChildren()) do
+	            if item.Name == "T" then
+	                count += 1
+	            end
+	        end
+	        shakeLabel.Text = "Toxic Shakes: " .. count
+	    end
+	    updateShakes()
+	    drinksFolder.ChildAdded:Connect(updateShakes)
+	    drinksFolder.ChildRemoved:Connect(updateShakes)
+	end)
+	
+	-- Page switching logic
+	nextPageButton.MouseButton1Click:Connect(function()
+	    page1.Visible = false
+	    page2.Visible = true
+	end)
+	
+	backButton.MouseButton1Click:Connect(function()
+	    page2.Visible = false
+	    page1.Visible = true
+	end)
+	
+	-- Minimise / Maximise Logic (affects both pages)
 	local minimized = false
-	local guiElements = { soloButton, onOffButton, usernameBox, roleBox }
-	local originalSize = mainFrame.Size
-	local originalPos = mainFrame.Position
+	local originalSize = page1.Size
+	local originalPos = page1.Position
 	local titleBarHeight = titleBar.Size.Y.Offset
 	
 	minimizeButton.MouseButton1Click:Connect(function()
 	    minimized = not minimized
-	    for _, element in ipairs(guiElements) do
-	        element.Visible = not minimized
-	    end
 	    minimizeButton.Text = minimized and "+" or "-"
+	
 	    if minimized then
-	        mainFrame.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, titleBarHeight + 10)
-	        mainFrame.Position = UDim2.new(
-	            originalPos.X.Scale,
-	            originalPos.X.Offset,
-	            originalPos.Y.Scale,
-	            originalPos.Y.Offset + (originalSize.Y.Offset - (titleBarHeight + 10)) / 2
-	        )
+	        -- Hide both pages
+	        page1.Visible = false
+	        page2.Visible = false
+	        -- Shrink container
+	        page1.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, titleBarHeight + 10)
+	        page1.Position = originalPos
 	    else
-	        mainFrame.Size = originalSize
-	        mainFrame.Position = originalPos
+	        -- Restore page1 by default if page2 not active
+	        if not page2.Visible then
+	            page1.Visible = true
+	        end
+	        page1.Size = originalSize
+	        page1.Position = originalPos
 	    end
 	end)
 	
@@ -312,7 +430,7 @@ return function()
 	    -- Schedule the restart
 	    task.delay(delay or 0, function()
 	        if activeRole == role then
-	            -- Reset cycle tracking and flags
+	            -- Reset flags (optionally preserve averages by commenting out the next 2 lines)
 	            cycleDurations10[role] = {}
 	            lastCycleTime[role] = nil
 	            p1Won, p2Won, timeoutElapsed = false, false, false
@@ -339,9 +457,10 @@ return function()
 	        end
 	        winConnection1 = SoundEvent.OnClientEvent:Connect(function(action, data)
 	            if activeRole ~= 1 then return end
-	            if action == "Play" and type(data) == "table" and data.Name == "Win" then
+	            if action == "Play" and type(data) == "table" and data.Name == "WinP1" then
+	                -- Player 1 is the winner
 	                p1Won = true
-	                print("✅ Win event received for Player 1")
+	                print("✅ Player 1 declared winner")
 	            end
 	        end)
 	
@@ -369,18 +488,19 @@ return function()
 	        end
 	        winConnection2 = SoundEvent.OnClientEvent:Connect(function(action, data)
 	            if activeRole ~= 2 then return end
-	            if action == "Play" and type(data) == "table" and data.Name == "Win" then
+	            if action == "Play" and type(data) == "table" and data.Name == "WinP2" then
+	                -- Player 2 is the winner
 	                p2Won = true
 	                local avg = getCycleAverage(2) or (configs[2] and configs[2].cycleDelay) or 0
 	                local delay = avg + 22.5
-	                print(("✅ P2 win — restarting after %.2fs (avg=%.3f+22.5)"):format(delay, avg))
+	                print(("✅ Player 2 declared winner — restarting after %.2fs (avg=%.3f+22.5)"):format(delay, avg))
 	                restartRole(2, delay)
 	            end
 	        end)
 	    end
 	end
 					
-	-- Core loop (os.clock() based, drift-proof) with role-1 watchdog
+	-- Core loop (os.clock() based, drift-proof)
 	function runLoop(role)
 	    local points = role == 1 and {
 	        workspace.Spar_Ring1.Player1_Button.CFrame,
@@ -456,35 +576,43 @@ return function()
 	        end
 	    end)
 	
-	-- SOLO Fallback: only for role 1
-	if role == 1 then
-	    task.spawn(function()
-	        local checkStart = os.clock()
-	        while activeRole == 1 and isActive do
-	            local targetName = usernameBox.Text
-	            local targetPlayer = targetName ~= "" and Players:FindFirstChild(targetName) or nil
+	    -- SOLO Fallback: only for role 1
+	    if role == 1 then
+	        task.spawn(function()
+	            local checkStart = os.clock()
+	            local fallbackTriggered = false  -- debounce
+	            while activeRole == 1 and isActive do
+	                local targetName = usernameBox.Text
+	                local hasName = (targetName ~= nil and targetName ~= "")
+	                local targetPlayer = hasName and Players:FindFirstChild(targetName) or nil
 	
-	            if not targetPlayer then
-	                if (os.clock() - checkStart) >= 10 then
-	                    print(("⚠️ %s not found! Switching to solo mode... 🧍"):format(targetName ~= "" and targetName or "Player 2"))
-	                    activeRole = nil
-	                    if restartRole then
-	                        restartRole(3, 1)
-	                    else
-	                        warn("runLoop: restartRole is nil; cannot switch to solo")
+	                if not targetPlayer and hasName then
+	                    if (os.clock() - checkStart) >= 10 and not fallbackTriggered then
+	                        fallbackTriggered = true
+	                        print(("⚠️ %s not found! Switching to solo mode... 🧍"):format(targetName))
+	                        -- guard in case role flipped while waiting
+	                        if activeRole == 1 and isActive then
+	                            activeRole = nil
+	                            if restartRole then
+	                                restartRole(3, 1)
+	                            else
+	                                warn("runLoop: restartRole is nil; cannot switch to solo")
+	                            end
+	                        end
+	                        return
 	                    end
-	                    return
+	                else
+	                    -- reset timer when target is present (continuous-absence logic)
+	                    checkStart = os.clock()
+	                    fallbackTriggered = false
 	                end
-	            else
-	                -- reset timer if the target player is present again
-	                checkStart = os.clock()
-	            end
 	
-	            waitSeconds(1)
-	        end
-	    end)
+	                waitSeconds(1)
+	            end
+	        end)
+	    end
 	end
-			
+	
 	-- Reset cycle tracking for a given role
 	local function resetCycles(role)
 	    cycleDurations10[role] = {}
@@ -521,7 +649,13 @@ return function()
 	    onOffButton.Text = "ON"
 	    onOffButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
 	
+	    -- Start loop and ARM WIN LISTENERS on first start
 	    runLoop(activeRole)
+	    if listenForWin then
+	        listenForWin(activeRole)
+	    else
+	        warn("validateAndAssignRole: listenForWin not assigned yet")
+	    end
 	end
 	
 	-- Assign handlers
