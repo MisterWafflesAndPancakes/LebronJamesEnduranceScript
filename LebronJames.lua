@@ -52,8 +52,8 @@ return function()
 	local mainContainer = Instance.new("Frame")
 	mainContainer.Size = UDim2.new(0, 450, 0, 300) -- 40 for title + 260 for page
 	mainContainer.Position = UDim2.new(0.5, -225, 0.5, -190)
-	mainContainer.BackgroundColor3 = Color3.fromRGB(25, 25, 25) -- darker gray
-	mainContainer.BackgroundTransparency = 0.25                 -- consistent transparency
+	mainContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 30) -- dark gray
+	mainContainer.BackgroundTransparency = 0.3                  -- semi-transparent
 	mainContainer.BorderSizePixel = 0
 	mainContainer.Parent = screenGui
 	
@@ -61,8 +61,8 @@ return function()
 	local titleBar = Instance.new("Frame")
 	titleBar.Size = UDim2.new(1, 0, 0, 40)
 	titleBar.Position = UDim2.new(0, 0, 0, 0)
-	titleBar.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-	titleBar.BackgroundTransparency = 0.25
+	titleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	titleBar.BackgroundTransparency = 0.3
 	titleBar.BorderSizePixel = 0
 	titleBar.ZIndex = 2
 	titleBar.Parent = mainContainer
@@ -75,10 +75,8 @@ return function()
 	minimizeButton.Font = Enum.Font.Arcade
 	minimizeButton.TextSize = 24
 	minimizeButton.TextColor3 = Color3.new(1, 1, 1)
-	minimizeButton.TextStrokeTransparency = 0.8
-	minimizeButton.TextStrokeColor3 = Color3.fromRGB(0,0,0)
-	minimizeButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25) -- unified with container
-	minimizeButton.BackgroundTransparency = 0.25
+	minimizeButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80) -- darker gray
+	minimizeButton.BackgroundTransparency = 0
 	minimizeButton.BorderSizePixel = 0
 	minimizeButton.ZIndex = 3
 	minimizeButton.Parent = titleBar
@@ -90,24 +88,19 @@ return function()
 	titleLabel.Font = Enum.Font.Arcade
 	titleLabel.TextSize = 24
 	titleLabel.TextColor3 = Color3.new(1, 1, 1)
-	titleLabel.TextStrokeTransparency = 0.8
-	titleLabel.TextStrokeColor3 = Color3.fromRGB(0,0,0)
 	titleLabel.BackgroundTransparency = 1 -- no box behind text
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Center
 	titleLabel.ZIndex = 3
 	titleLabel.Parent = titleBar
 	
-	-- Utility to create buttons (darker unified style)
+	-- Utility to create buttons (bright blue accent style)
 	local function createButton(text, position, parent, size)
 	    local button = Instance.new("TextButton")
 	    button.Size = size or UDim2.new(0, 200, 0, 40)
 	    button.Position = position
 	    button.Text = text
-	    button.BackgroundColor3 = Color3.fromRGB(25, 25, 25) -- darker gray
-	    button.BackgroundTransparency = 0.25                 -- consistent transparency
+	    button.BackgroundColor3 = Color3.fromRGB(100, 170, 255) -- bright blue
 	    button.TextColor3 = Color3.new(1, 1, 1)
-	    button.TextStrokeTransparency = 0.8
-	    button.TextStrokeColor3 = Color3.fromRGB(0,0,0)
 	    button.Font = Enum.Font.Arcade
 	    button.TextSize = 20
 	    button.Active = true
@@ -122,8 +115,8 @@ return function()
 	local page1 = Instance.new("Frame")
 	page1.Position = UDim2.new(0, 0, 0, 40) -- push down below title bar
 	page1.Size = UDim2.new(1, 0, 0, 260)    -- 300 total - 40 bar = 260
-	page1.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-	page1.BackgroundTransparency = 0.25
+	page1.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	page1.BackgroundTransparency = 0.3
 	page1.BorderSizePixel = 0
 	page1.ZIndex = 1
 	page1.Parent = mainContainer
@@ -138,7 +131,7 @@ return function()
 	usernameBox.Font = Enum.Font.Arcade
 	usernameBox.TextSize = 18
 	usernameBox.TextColor3 = Color3.new(1, 1, 1)
-	usernameBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45) -- solid for readability
+	usernameBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50) -- solid gray
 	usernameBox.BorderSizePixel = 0
 	usernameBox.Parent = page1
 	
@@ -149,7 +142,7 @@ return function()
 	roleBox.Font = Enum.Font.Arcade
 	roleBox.TextSize = 18
 	roleBox.TextColor3 = Color3.new(1, 1, 1)
-	roleBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45) -- solid for readability
+	roleBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50) -- solid gray
 	roleBox.BorderSizePixel = 0
 	roleBox.Parent = page1
 	
@@ -160,8 +153,8 @@ return function()
 	local page2 = Instance.new("Frame")
 	page2.Position = UDim2.new(0, 0, 0, 40)
 	page2.Size = UDim2.new(1, 0, 0, 260)
-	page2.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-	page2.BackgroundTransparency = 0.25
+	page2.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	page2.BackgroundTransparency = 0.3
 	page2.BorderSizePixel = 0
 	page2.Visible = false
 	page2.ZIndex = 1
@@ -209,7 +202,7 @@ return function()
 	enduranceLabel.TextColor3 = Color3.new(1, 1, 1)
 	enduranceLabel.TextStrokeTransparency = 0.8
 	enduranceLabel.TextStrokeColor3 = Color3.fromRGB(0,0,0)
-	enduranceLabel.BackgroundTransparency = 1
+	enduranceLabel.BackgroundTransparency = 1 -- keep transparent so text sits cleanly
 	enduranceLabel.TextXAlignment = Enum.TextXAlignment.Center
 	enduranceLabel.Text = "Endurance: not found"
 	enduranceLabel.ZIndex = 2
@@ -466,13 +459,9 @@ return function()
 	        loopConnection:Disconnect()
 	        loopConnection = nil
 	    end
-	    if winConnection1 and winConnection1.Connected then
-	        winConnection1:Disconnect()
-	        winConnection1 = nil
-	    end
-	    if winConnection2 and winConnection2.Connected then
-	        winConnection2:Disconnect()
-	        winConnection2 = nil
+	    if winConnection and winConnection.Connected then
+	        winConnection:Disconnect()
+	        winConnection = nil
 	    end
 	
 	    isActive = false
@@ -502,34 +491,38 @@ return function()
 	    if role == 3 or not SoundEvent or not SoundEvent.OnClientEvent then return end
 	
 	    -- Disconnect old connection
-	    if winConnection1 and winConnection1.Connected then
-	        winConnection1:Disconnect()
-	    end
-	    if winConnection2 and winConnection2.Connected then
-	        winConnection2:Disconnect()
+	    if winConnection and winConnection.Connected then
+	        winConnection:Disconnect()
+	        winConnection = nil
 	    end
 	
+	    -- Arm generation
+	    timeoutGen += 1
+	    local myGen = timeoutGen
+	
 	    if role == 1 then
-	        -- Player 1: only restart if no win in 15s
-	        winConnection1 = SoundEvent.OnClientEvent:Connect(function(action, data)
+	        -- Player 1: detect win
+	        winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
 	            if activeRole ~= 1 then return end
 	            if action == "Play" and type(data) == "table" and data.Name == "WinP1" then
 	                won = true
+	                timeoutElapsed = false
 	                print("✅ Role 1 win detected")
-	                -- No immediate restart; watchdog handles timeout
+	                -- NOTE: no timeoutGen increment here
 	            end
 	        end)
 	
-	        timeoutGen += 1
-	        local myGen = timeoutGen
+	        -- Watchdog only triggers if NO win in window
 	        task.spawn(function()
 	            local startTime = os.clock()
-	            while os.clock() - startTime < 15 do
+	            local windowSeconds = 15
+	            while os.clock() - startTime < windowSeconds do
 	                if won or activeRole ~= 1 or myGen ~= timeoutGen then return end
 	                RunService.Heartbeat:Wait()
 	            end
 	            if not won and activeRole == 1 and myGen == timeoutGen then
 	                timeoutElapsed = true
+	                timeoutGen += 1 -- only increment when timeout actually fires
 	                local avg = getCycleAverage(1) or (configs[1] and configs[1].cycleDelay) or 0
 	                local delay = avg + 10
 	                print(("⚠️ Role 1 timed out — restarting after %.2fs (avg=%.3f+10)"):format(delay, avg))
@@ -539,13 +532,14 @@ return function()
 	
 	    elseif role == 2 then
 	        -- Player 2: restart immediately on win
-	        winConnection2 = SoundEvent.OnClientEvent:Connect(function(action, data)
+	        winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
 	            if activeRole ~= 2 then return end
 	            if action == "Play" and type(data) == "table" and data.Name == "WinP2" then
 	                won = true
+	                timeoutElapsed = false
 	                local avg = getCycleAverage(2) or (configs[2] and configs[2].cycleDelay) or 0
 	                local delay = avg + 22.5
-	                print(("⚠️ Role 2 win detected — restarting after %.2fs (avg=%.3f+22.5)"):format(delay, avg))
+	                print(("✅ Role 2 win detected — restarting after %.2fs (avg=%.3f+22.5)"):format(delay, avg))
 	                restartRole(2, delay)
 	            end
 	        end)
