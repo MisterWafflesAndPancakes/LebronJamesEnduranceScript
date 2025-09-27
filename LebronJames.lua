@@ -456,16 +456,17 @@ return function()
 	        end
 	    end)
 	
-	-- SOLO Fallback: only for role 1, track Player 2's presence
+	-- SOLO Fallback: only for role 1
 	if role == 1 then
 	    task.spawn(function()
 	        local checkStart = os.clock()
 	        while activeRole == 1 and isActive do
-	            -- explicitly look for Player 2 by name
-	            local targetPlayer = Players:FindFirstChild("Player2")  -- replace with the actual username if fixed
+	            local targetName = usernameBox.Text
+	            local targetPlayer = targetName ~= "" and Players:FindFirstChild(targetName) or nil
+	
 	            if not targetPlayer then
 	                if (os.clock() - checkStart) >= 10 then
-	                    print("Player 2 cannot be found! Switching to solo mode now... 🧍")
+	                    print(("⚠️ %s not found! Switching to solo mode... 🧍"):format(targetName ~= "" and targetName or "Player 2"))
 	                    activeRole = nil
 	                    if restartRole then
 	                        restartRole(3, 1)
@@ -475,14 +476,15 @@ return function()
 	                    return
 	                end
 	            else
-	                -- reset timer if Player 2 is present again
+	                -- reset timer if the target player is present again
 	                checkStart = os.clock()
 	            end
+	
 	            waitSeconds(1)
 	        end
 	    end)
 	end
-		
+			
 	-- Reset cycle tracking for a given role
 	local function resetCycles(role)
 	    cycleDurations10[role] = {}
