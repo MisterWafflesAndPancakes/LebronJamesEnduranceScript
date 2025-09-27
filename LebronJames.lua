@@ -508,7 +508,6 @@ return function()
 	                if data.Name == "WinP1" or data.Name == "Win" then
 	                    won = true
 	                    timeoutElapsed = false
-	                    print("✅ Role 1 win detected (event=" .. tostring(data.Name) .. ")")
 	                end
 	            end
 	        end)
@@ -543,7 +542,7 @@ return function()
 	                    timeoutElapsed = false
 	                    local avg = getCycleAverage(2) or (configs[2] and configs[2].cycleDelay) or 0
 	                    local delay = avg + 22.5
-	                    print(("✅ Role 2 win detected — restarting after %.2fs (avg=%.3f+22.5) [event=%s]"):format(delay, avg, tostring(data.Name)))
+	                    print(("⚠️ Role 2 win detected — restarting after %.2fs (avg=%.3f+22.5) [event=%s]"):format(delay, avg, tostring(data.Name)))
 	                    restartRole(2, delay)
 	                end
 	            end
