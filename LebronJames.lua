@@ -23,21 +23,20 @@ return function()
 	local handleSoloClick
 	
 	-- Adaptive restart state
-	local won = false
+	local won = false          -- unified win flag (used for both roles)
 	local timeoutElapsed = false
-	local p1Won, p2Won = false, false
 	
 	-- Cycle tracking (10‑cycle buffer only)
 	local cycleDurations10 = { [1] = {}, [2] = {} }
 	local lastCycleTime    = { [1] = nil, [2] = nil }
 	
-	-- Drift-proof wait helper
+	-- Drift‑proof wait helper
 	local function waitSeconds(seconds)
 	    local start = os.clock()
 	    repeat RunService.Heartbeat:Wait() until os.clock() - start >= seconds
 	end
 	
-	-- RemoteEvent reference (listen-only)
+	-- RemoteEvent reference (listen‑only)
 	local SoundEvent = ReplicatedStorage:WaitForChild("Sound", 5)
 	if not SoundEvent then
 	    warn("❌ 'Sound' RemoteEvent not found in ReplicatedStorage, win detection disabled.")
@@ -110,7 +109,7 @@ return function()
 	page1.Position = UDim2.new(0, 0, 0, 0)   -- ✅ flush under the bar
 	page1.Size = UDim2.new(1, 0, 0, 260)     -- keep height so total = 300
 	page1.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-	page1.BackgroundTransparency = 0.4
+	page1.BackgroundTransparency = 0.6
 	page1.BorderSizePixel = 0
 	page1.Parent = mainContainer
 	
@@ -347,18 +346,14 @@ return function()
    
 	-- Force toggle off helper
 	local function forceToggleOff()
-	    -- Disconnect loop + win listeners
+	    -- Disconnect loop + win listener(s)
 	    if loopConnection and loopConnection.Connected then
 	        loopConnection:Disconnect()
 	        loopConnection = nil
 	    end
-	    if winConnection1 and winConnection1.Connected then
-	        winConnection1:Disconnect()
-	        winConnection1 = nil
-	    end
-	    if winConnection2 and winConnection2.Connected then
-	        winConnection2:Disconnect()
-	        winConnection2 = nil
+	    if winConnection and winConnection.Connected then
+	        winConnection:Disconnect()
+	        winConnection = nil
 	    end
 	
 	    -- Reset cycle tracking for the active role
@@ -371,7 +366,6 @@ return function()
 	    activeRole = nil
 	    isActive = false
 	    won, timeoutElapsed = false, false
-	    p1Won, p2Won = false, false
 	
 	    -- UI feedback
 	    onOffButton.Text = "OFF"
@@ -400,7 +394,6 @@ return function()
 	-- Cold start reset (initialise state once at load)
 	won = false
 	timeoutElapsed = false
-	p1Won, p2Won = false, false
 	
 	-- Reset cycle tracking for roles 1 and 2
 	cycleDurations10 = { [1] = {}, [2] = {} }
@@ -414,12 +407,12 @@ return function()
 	}
 	
 	-- Track wins
-	local p1Won, p2Won = false, false
+	local won = false
 	local timeoutGen = 0
 	
 	-- Rolling buffer (10 cycles)
 	local cycleDurations10 = { [1] = {}, [2] = {} }
-	local lastCycleTime = { [1] = nil, [2] = nil }
+	local lastCycleTime    = { [1] = nil, [2] = nil }
 	
 	-- Record a completed cycle
 	local function recordCycle(role)
@@ -468,12 +461,12 @@ return function()
 	            -- Reset flags (optionally preserve averages by commenting out the next 2 lines)
 	            cycleDurations10[role] = {}
 	            lastCycleTime[role] = nil
-	            p1Won, p2Won, timeoutElapsed = false, false, false
+	            won, timeoutElapsed = false, false
 	
 	            -- Start fresh
 	            isActive = true
-	            runLoop(role)
-	            listenForWin(role)
+	            if type(runLoop) == "function" then runLoop(role) end
+	            if type(listenForWin) == "function" then listenForWin(role) end
 	
 	            print(("🔄 Role %d restarted after %.2fs"):format(role, delay or 0))
 	        else
@@ -483,52 +476,54 @@ return function()
 	end
 	
 	-- Win/timeout detection
-	local function listenForWin(role)
-	    if role == 3 or not SoundEvent then return end
+	function listenForWin(role)
+	    if role == 3 or not SoundEvent or not SoundEvent.OnClientEvent then return end
+	
+	    -- Disconnect old connection
+	    if winConnection1 and winConnection1.Connected then
+	        winConnection1:Disconnect()
+	    end
+	    if winConnection2 and winConnection2.Connected then
+	        winConnection2:Disconnect()
+	    end
 	
 	    if role == 1 then
-	        if winConnection1 and winConnection1.Connected then
-	            winConnection1:Disconnect()
-	        end
+	        -- Player 1: only restart if no win in 15s
 	        winConnection1 = SoundEvent.OnClientEvent:Connect(function(action, data)
 	            if activeRole ~= 1 then return end
 	            if action == "Play" and type(data) == "table" and data.Name == "WinP1" then
-	                -- Player 1 is the winner
-	                p1Won = true
-	                print("✅ Player 1 declared winner")
+	                won = true
+	                print("✅ Role 1 win detected")
+	                -- No immediate restart; watchdog handles timeout
 	            end
 	        end)
 	
-	        -- Watchdog: if no win in 15s, restart P1 using avg+10
 	        timeoutGen += 1
 	        local myGen = timeoutGen
 	        task.spawn(function()
 	            local startTime = os.clock()
 	            while os.clock() - startTime < 15 do
-	                if p1Won or activeRole ~= 1 or myGen ~= timeoutGen then return end
+	                if won or activeRole ~= 1 or myGen ~= timeoutGen then return end
 	                RunService.Heartbeat:Wait()
 	            end
-	            if not p1Won and activeRole == 1 and myGen == timeoutGen then
+	            if not won and activeRole == 1 and myGen == timeoutGen then
 	                timeoutElapsed = true
 	                local avg = getCycleAverage(1) or (configs[1] and configs[1].cycleDelay) or 0
 	                local delay = avg + 10
-	                print(("⚠️ P1 timed out — restarting after %.2fs (avg=%.3f+10)"):format(delay, avg))
+	                print(("⚠️ Role 1 timed out — restarting after %.2fs (avg=%.3f+10)"):format(delay, avg))
 	                restartRole(1, delay)
 	            end
 	        end)
 	
 	    elseif role == 2 then
-	        if winConnection2 and winConnection2.Connected then
-	            winConnection2:Disconnect()
-	        end
+	        -- Player 2: restart immediately on win
 	        winConnection2 = SoundEvent.OnClientEvent:Connect(function(action, data)
 	            if activeRole ~= 2 then return end
 	            if action == "Play" and type(data) == "table" and data.Name == "WinP2" then
-	                -- Player 2 is the winner
-	                p2Won = true
+	                won = true
 	                local avg = getCycleAverage(2) or (configs[2] and configs[2].cycleDelay) or 0
 	                local delay = avg + 22.5
-	                print(("⚠️ Player 2 declared winner — restarting after %.2fs (avg=%.3f+22.5)"):format(delay, avg))
+	                print(("⚠️ Role 2 win detected — restarting after %.2fs (avg=%.3f+22.5)"):format(delay, avg))
 	                restartRole(2, delay)
 	            end
 	        end)
@@ -677,7 +672,7 @@ return function()
 	    end
 	
 	    -- Reset state + cycles
-	    p1Won, p2Won, timeoutElapsed = false, false, false
+	    won, timeoutElapsed = false, false
 	    resetCycles(activeRole)
 	
 	    isActive = true
@@ -708,7 +703,7 @@ return function()
 	    waitSeconds(1)
 	
 	    activeRole, isActive = 3, true
-	    p1Won, p2Won, timeoutElapsed = false, false, false
+	    won, timeoutElapsed = false, false
 	    resetCycles(3)
 	
 	    onOffButton.Text = "SOLO mode: ON"
