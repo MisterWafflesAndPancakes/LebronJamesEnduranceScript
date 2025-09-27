@@ -49,49 +49,42 @@ return function()
 	screenGui.ResetOnSpawn = false
 	screenGui.Parent = player:WaitForChild("PlayerGui")
 	
-	-- Main Container Frame (Page 1)
-	local page1 = Instance.new("Frame")
-	page1.Size = UDim2.new(0, 450, 0, 300)
-	page1.Position = UDim2.new(0.5, -225, 0.5, -150)
-	page1.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-	page1.BackgroundTransparency = 0.3
-	page1.BorderSizePixel = 0
-	page1.Parent = screenGui
+	-- Shared Title Bar
+	local titleBar = Instance.new("Frame")
+	titleBar.Size = UDim2.new(0, 450, 0, 40)
+	titleBar.Position = UDim2.new(0.5, -225, 0.5, -190)
+	titleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	titleBar.BackgroundTransparency = 0.2
+	titleBar.BorderSizePixel = 0
+	titleBar.Parent = screenGui
 	
-	-- Make GUI draggable
-	local function makeDraggable(gui)
-	    local dragging, dragStart, startPos = false, nil, nil
-	    gui.InputBegan:Connect(function(input)
-	        if input.UserInputType == Enum.UserInputType.MouseButton1
-	        or input.UserInputType == Enum.UserInputType.Touch then
-	            dragging = true
-	            dragStart = input.Position
-	            startPos = gui.Position
-	        end
-	    end)
-	    gui.InputEnded:Connect(function(input)
-	        if input.UserInputType == Enum.UserInputType.MouseButton1
-	        or input.UserInputType == Enum.UserInputType.Touch then
-	            dragging = false
-	        end
-	    end)
-	    UserInputService.InputChanged:Connect(function(input)
-	        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
-	        or input.UserInputType == Enum.UserInputType.Touch) then
-	            local delta = input.Position - dragStart
-	            gui.Position = UDim2.new(
-	                startPos.X.Scale, startPos.X.Offset + delta.X,
-	                startPos.Y.Scale, startPos.Y.Offset + delta.Y
-	            )
-	        end
-	    end)
-	end
-	makeDraggable(page1)
+	local minimizeButton = Instance.new("TextButton")
+	minimizeButton.Size = UDim2.new(0, 40, 0, 40)
+	minimizeButton.AnchorPoint = Vector2.new(1, 0)
+	minimizeButton.Position = UDim2.new(1, -5, 0, 0)
+	minimizeButton.Text = "-"
+	minimizeButton.Font = Enum.Font.Arcade
+	minimizeButton.TextSize = 24
+	minimizeButton.TextColor3 = Color3.new(1, 1, 1)
+	minimizeButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+	minimizeButton.BorderSizePixel = 0
+	minimizeButton.Parent = titleBar
+	
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.Size = UDim2.new(1, -50, 1, 0)
+	titleLabel.Position = UDim2.new(0, 0, 0, 0)
+	titleLabel.Text = "LeBron James Endurance Script"
+	titleLabel.Font = Enum.Font.Arcade
+	titleLabel.TextSize = 24
+	titleLabel.TextColor3 = Color3.new(1, 1, 1)
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Center
+	titleLabel.Parent = titleBar
 	
 	-- Utility to create buttons
-	local function createButton(text, position, parent)
+	local function createButton(text, position, parent, size)
 	    local button = Instance.new("TextButton")
-	    button.Size = UDim2.new(0, 200, 0, 40)
+	    button.Size = size or UDim2.new(0, 200, 0, 40)
 	    button.Position = position
 	    button.Text = text
 	    button.BackgroundColor3 = Color3.fromRGB(100, 170, 255)
@@ -104,7 +97,15 @@ return function()
 	    return button
 	end
 	
-	-- Page 1 Elements
+	-- Page 1
+	local page1 = Instance.new("Frame")
+	page1.Size = UDim2.new(0, 450, 0, 260)
+	page1.Position = UDim2.new(0.5, -225, 0.5, -150)
+	page1.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	page1.BackgroundTransparency = 0.3
+	page1.BorderSizePixel = 0
+	page1.Parent = screenGui
+	
 	local soloButton = createButton("SOLO MODE", UDim2.new(0, 20, 0, 60), page1)
 	local onOffButton = createButton("OFF", UDim2.new(0, 230, 0, 60), page1)
 	
@@ -130,64 +131,19 @@ return function()
 	roleBox.BorderSizePixel = 0
 	roleBox.Parent = page1
 	
-	-- Title Bar Container
-	local titleBar = Instance.new("Frame")
-	titleBar.Size = UDim2.new(1, 0, 0, 40)
-	titleBar.BackgroundTransparency = 1
-	titleBar.Parent = page1
-	
-	-- Minimise Button
-	local minimizeButton = Instance.new("TextButton")
-	minimizeButton.Size = UDim2.new(0, 40, 0, 40)
-	minimizeButton.AnchorPoint = Vector2.new(1, 0)
-	minimizeButton.Position = UDim2.new(1, -5, 0, 0)
-	minimizeButton.Text = "-"
-	minimizeButton.Font = Enum.Font.Arcade
-	minimizeButton.TextSize = 24
-	minimizeButton.TextColor3 = Color3.new(1, 1, 1)
-	minimizeButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-	minimizeButton.BorderSizePixel = 0
-	minimizeButton.Parent = titleBar
-	
-	-- Title Label
-	local padding = 10
-	local safeZone = minimizeButton.Size.X.Offset + padding
-	local titleLabel = Instance.new("TextLabel")
-	titleLabel.Size = UDim2.new(1, -safeZone, 1, 0)
-	titleLabel.Position = UDim2.new(0, 0, 0, 0)
-	titleLabel.Text = "LeBron James Endurance Script"
-	titleLabel.Font = Enum.Font.Arcade
-	titleLabel.TextSize = 24
-	titleLabel.TextColor3 = Color3.new(1, 1, 1)
-	titleLabel.BackgroundTransparency = 1
-	titleLabel.TextXAlignment = Enum.TextXAlignment.Center
-	titleLabel.Parent = titleBar
-	
-	-- Next Page Button (bottom right)
-	local nextPageButton = createButton("NEXT >", UDim2.new(1, -220, 1, -50), page1)
+	-- Smaller Next button (bottom right)
+	local nextPageButton = createButton("NEXT >", UDim2.new(1, -100, 1, -40), page1, UDim2.new(0, 80, 0, 30))
 	
 	-- Page 2
 	local page2 = Instance.new("Frame")
-	page2.Size = UDim2.new(0, 450, 0, 300)
+	page2.Size = UDim2.new(0, 450, 0, 260)
 	page2.Position = UDim2.new(0.5, -225, 0.5, -150)
 	page2.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 	page2.Visible = false
 	page2.Parent = screenGui
 	
-	-- Page 2 Header Label
-	local page2Header = Instance.new("TextLabel")
-	page2Header.Size = UDim2.new(1, -40, 0, 40)
-	page2Header.Position = UDim2.new(0, 20, 0, 50)
-	page2Header.Font = Enum.Font.Arcade
-	page2Header.TextSize = 22
-	page2Header.TextColor3 = Color3.new(1, 1, 1)
-	page2Header.BackgroundTransparency = 1
-	page2Header.TextXAlignment = Enum.TextXAlignment.Center
-	page2Header.Text = "Utilities"
-	page2Header.Parent = page2
-	
-	-- Back Button (bottom right)
-	local backButton = createButton("< BACK", UDim2.new(1, -220, 1, -50), page2)
+	-- Smaller Back button (bottom right)
+	local backButton = createButton("< BACK", UDim2.new(1, -100, 1, -40), page2, UDim2.new(0, 80, 0, 30))
 	
 	-- Auto Toxic Shake toggle (centered)
 	local toxicShakeButton = createButton("Auto Toxic Shake: OFF", UDim2.new(0.5, -100, 0, 80), page2)
@@ -272,18 +228,22 @@ return function()
 	    drinksFolder.ChildRemoved:Connect(updateShakes)
 	end)
 	
-	-- Page switching logic
+	-- Page switching logic with lastPage tracking
+	local lastPage = "page1"
+	
 	nextPageButton.MouseButton1Click:Connect(function()
 	    page1.Visible = false
 	    page2.Visible = true
+	    lastPage = "page2"
 	end)
 	
 	backButton.MouseButton1Click:Connect(function()
 	    page2.Visible = false
 	    page1.Visible = true
+	    lastPage = "page1"
 	end)
 	
-	-- Minimise / Maximise Logic (affects both pages)
+		-- Minimise / Maximise Logic (affects both pages)
 	local minimized = false
 	local originalSize = page1.Size
 	local originalPos = page1.Position
@@ -301,8 +261,10 @@ return function()
 	        page1.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, titleBarHeight + 10)
 	        page1.Position = originalPos
 	    else
-	        -- Restore page1 by default if page2 not active
-	        if not page2.Visible then
+	        -- Restore whichever page was last active
+	        if lastPage == "page2" then
+	            page2.Visible = true
+	        else
 	            page1.Visible = true
 	        end
 	        page1.Size = originalSize
