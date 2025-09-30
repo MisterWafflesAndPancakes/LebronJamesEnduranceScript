@@ -510,7 +510,6 @@ return function()
 					if data.Name == "WinP1" or data.Name == "Win" then
 						won = true
 						timeoutElapsed = false
-						print("✅ Role 1 win detected (event=" .. tostring(data.Name) .. ")")
 					end
 				end
 			end)
@@ -555,122 +554,142 @@ return function()
 					
 	-- Core loop (os.clock() based, drift-proof)
 	function runLoop(role)
-		local points = role == 1 and {
-			workspace.Spar_Ring1.Player1_Button.CFrame,
-			workspace.Spar_Ring4.Player1_Button.CFrame
-		} or role == 2 and {
-			workspace.Spar_Ring1.Player2_Button.CFrame,
-			workspace.Spar_Ring4.Player2_Button.CFrame
-		} or role == 3 and {
-			workspace.Spar_Ring2.Player1_Button.CFrame,
-			workspace.Spar_Ring2.Player2_Button.CFrame,
-			workspace.Spar_Ring3.Player1_Button.CFrame,
-			workspace.Spar_Ring3.Player2_Button.CFrame
-		}
+	    local points = role == 1 and {
+	        workspace.Spar_Ring1.Player1_Button.CFrame,
+	        workspace.Spar_Ring4.Player1_Button.CFrame
+	    } or role == 2 and {
+	        workspace.Spar_Ring1.Player2_Button.CFrame,
+	        workspace.Spar_Ring4.Player2_Button.CFrame
+	    } or role == 3 and {
+	        workspace.Spar_Ring2.Player1_Button.CFrame,
+	        workspace.Spar_Ring2.Player2_Button.CFrame,
+	        workspace.Spar_Ring3.Player1_Button.CFrame,
+	        workspace.Spar_Ring3.Player2_Button.CFrame
+	    }
 	
-		if not points then
-			warn("runLoop: no points available for role "..tostring(role))
-			return
-		end
+	    if not points then
+	        warn("runLoop: no points available for role " .. tostring(role))
+	        return
+	    end
 	
-		local config = configs[role]
-		if not config then
-			warn(("runLoop: missing config for role %s"):format(tostring(role)))
-			return
-		end
+	    local config = configs[role]
+	    if not config then
+	        warn(("runLoop: missing config for role %s"):format(tostring(role)))
+	        return
+	    end
 	
-		local index = 1
-		local phase = "teleport"
-		local phaseStart = os.clock()
+	    local index = 1
+	    local phase = "teleport"
+	    local phaseStart = os.clock()
+	    local teleported = false
 	
-		if loopConnection and loopConnection.Connected then
-			loopConnection:Disconnect()
-			loopConnection = nil
-		end
+	    if loopConnection and loopConnection.Connected then
+	        loopConnection:Disconnect()
+	        loopConnection = nil
+	    end
 	
-		loopConnection = RunService.Heartbeat:Connect(function()
-			if activeRole ~= role or not isActive then
-				if loopConnection and loopConnection.Connected then
-					loopConnection:Disconnect()
-					loopConnection = nil
-				end
-				return
-			end
+	    loopConnection = RunService.Heartbeat:Connect(function()
+	        if activeRole ~= role or not isActive then
+	            if loopConnection and loopConnection.Connected then
+	                loopConnection:Disconnect()
+	                loopConnection = nil
+	            end
+	            return
+	        end
 	
-			local now = os.clock()
-			local elapsed = now - phaseStart
+	        local now = os.clock()
+	        local elapsed = now - phaseStart
 	
-			if phase == "teleport" and elapsed >= config.teleportDelay then
-				phase, phaseStart = "kill", now
-				local char = player.Character or player.CharacterAdded:Wait()
-				local hrp = char:FindFirstChild("HumanoidRootPart")
-				if hrp then
-					hrp.CFrame = points[index]
-				end
+	        if phase == "teleport" and elapsed >= config.teleportDelay then
+	            local char = player.Character or player.CharacterAdded:Wait()
+	            local hrp = char:FindFirstChild("HumanoidRootPart")
+	            if hrp then
+	                hrp.CFrame = points[index]
+	                teleported = true
+	                phase = "kill"
+	                phaseStart = phaseStart + config.teleportDelay -- anchor to schedule
+	            end
 	
-			elseif phase == "kill" and elapsed >= config.deathDelay then
-				phase, phaseStart = "respawn", now
-				local char = player.Character
-				if char then
-					pcall(function() char:BreakJoints() end)
-				end
+	        elseif phase == "kill" and elapsed >= config.deathDelay and teleported then
+	            local char = player.Character
+	            if char then
+	                pcall(function() char:BreakJoints() end)
+	            end
+	            teleported = false
+	            phase = "respawn"
+	            phaseStart = phaseStart + config.deathDelay
 	
-			elseif phase == "respawn" then
-				local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-				if hrp then
-					-- ✅ Record cycle at respawn (drift-proof anchor)
-					if recordCycle then recordCycle(role) end
-					phase, phaseStart = "wait", os.clock()
-				end
+	        elseif phase == "respawn" then
+	            local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	            if hrp then
+	                -- ✅ Record cycle at respawn (drift-proof anchor)
+	                if recordCycle then recordCycle(role) end
+	                phase = "wait"
+	                phaseStart = os.clock() -- re‑anchor here since respawn is async
+	            end
 	
-			elseif phase == "wait" and elapsed >= config.cycleDelay then
-				phase, phaseStart = "teleport", os.clock()
-				index = index % #points + 1
-			end
-		end)
+	        elseif phase == "wait" and elapsed >= config.cycleDelay then
+	            phase = "teleport"
+	            phaseStart = phaseStart + config.cycleDelay
+	            index = index % #points + 1
+	        end
+	    end)
 	end
 	
-	-- SOLO Fallback: only for role 1
+		-- Variable to hold the chosen partner's username (set when Player1 types it)
+	local partnerName = nil
+	
+	-- Capture the username when Player1 presses Enter in the box
+	usernameBox.FocusLost:Connect(function(enterPressed)
+	    if enterPressed then
+	        local typed = usernameBox.Text
+	        if typed and typed ~= "" then
+	            partnerName = typed
+	            print("✅ Partner username set to:", partnerName)
+	        end
+	    end
+	end)
+	
+	-- SOLO Fallback: strictly for role 1
 	if role == 1 then
-		task.spawn(function()
-			local checkStart = os.clock()
-			local triggered = false
-			while activeRole == 1 and isActive do
-				local targetName = usernameBox.Text
-				local hasName = (targetName ~= nil and targetName ~= "")
-				local targetPlayer = hasName and Players:FindFirstChild(targetName) or nil
+	    task.spawn(function()
+	        local checkStart = os.clock()
+	        local triggered = false
 	
-				if not targetPlayer and hasName then
-					if (os.clock() - checkStart) >= 10 and not triggered then
-						triggered = true
-						print(("⚠️ %s not found! Switching to SOLO mode 🧍"):format(targetName))
+	        while activeRole == 1 and isActive do
+	            local partner = nil
+	            if partnerName then
+	                -- look for that exact username in Players
+	                partner = Players:FindFirstChild(partnerName)
+	            end
 	
-						if activeRole == 1 and isActive then
-							-- switch to solo
-							activeRole, isActive = 3, true
-							won, timeoutElapsed = false, false
+	            if not partner then
+	                -- specific partner not in server
+	                if (os.clock() - checkStart) >= 10 and not triggered then
+	                    triggered = true
+	                    print("⚠️ Partner "..tostring(partnerName).." not found! Switching to SOLO mode 🧍")
 	
-							-- clear Role 3’s cycle tracking so it starts clean
-							resetCycles(3)
+	                    if activeRole == 1 and isActive then
+	                        activeRole, isActive = 3, true
+	                        won, timeoutElapsed = false, false
+	                        resetCycles(3)
 	
-							-- update UI
-							onOffButton.Text = "SOLO mode: ON"
-							onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+	                        onOffButton.Text = "SOLO mode: ON"
+	                        onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
 	
-							-- run solo config
-							runLoop(3)
-						end
-						return
-					end
-				else
-					-- reset timer if target is present
-					checkStart = os.clock()
-					triggered = false
-				end
+	                        runLoop(3)
+	                    end
+	                    return
+	                end
+	            else
+	                -- partner present, reset timer
+	                checkStart = os.clock()
+	                triggered = false
+	            end
 	
-				waitSeconds(1)
-			end
-		end)
+	            waitSeconds(1) -- drift‑proof 1s wait
+	        end
+	    end)
 	end
 	
 	-- Reset cycle tracking for a given role
@@ -722,7 +741,6 @@ return function()
 	handleOnOffClick = function()
 		if activeRole then
 			forceToggleOff()
-			usernameBox.Text, roleBox.Text = "", ""
 		else
 			validateAndAssignRole()
 		end
