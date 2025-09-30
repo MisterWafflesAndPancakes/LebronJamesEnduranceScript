@@ -630,41 +630,41 @@ return function()
 	        end
 	    end)
 	
-	    -- SOLO Fallback: only for role 1
-	    if role == 1 then
-	        task.spawn(function()
-	            local checkStart = os.clock()
-	            local fallbackTriggered = false  -- debounce
-	            while activeRole == 1 and isActive do
-	                local targetName = usernameBox.Text
-	                local hasName = (targetName ~= nil and targetName ~= "")
-	                local targetPlayer = hasName and Players:FindFirstChild(targetName) or nil
+	-- SOLO Fallback: only for role 1
+	if role == 1 then
+	    task.spawn(function()
+	        local checkStart = os.clock()
+	        local fallbackTriggered = false  -- debounce
+	        while activeRole == 1 and isActive do
+	            local targetName = usernameBox.Text
+	            local hasName = (targetName ~= nil and targetName ~= "")
+	            local targetPlayer = hasName and Players:FindFirstChild(targetName) or nil
 	
-	                if not targetPlayer and hasName then
-	                    if (os.clock() - checkStart) >= 10 and not fallbackTriggered then
-	                        fallbackTriggered = true
-	                        print(("⚠️ %s not found! Switching to solo mode... 🧍"):format(targetName))
-	                        -- guard in case role flipped while waiting
-	                        if activeRole == 1 and isActive then
-	                            activeRole = nil
-	                            if restartRole then
-	                                restartRole(3, 1)
-	                            else
-	                                warn("runLoop: restartRole is nil; cannot switch to solo")
-	                            end
+	            if not targetPlayer and hasName then
+	                if (os.clock() - checkStart) >= 10 and not fallbackTriggered then
+	                    fallbackTriggered = true
+	                    print(("⚠️ %s not found! Switching to solo mode... 🧍"):format(targetName))
+	                    -- guard in case role flipped while waiting
+	                    if activeRole == 1 and isActive then
+	                        -- set role to 3 before restart
+	                        activeRole = 3
+	                        if restartRole then
+	                            restartRole(3, 1)
+	                        else
+	                            warn("runLoop: restartRole is nil; cannot switch to solo")
 	                        end
-	                        return
 	                    end
-	                else
-	                    -- reset timer when target is present (continuous-absence logic)
-	                    checkStart = os.clock()
-	                    fallbackTriggered = false
+	                    return
 	                end
-	
-	                waitSeconds(1)
+	            else
+	                -- reset timer when target is present (continuous-absence logic)
+	                checkStart = os.clock()
+	                fallbackTriggered = false
 	            end
-	        end)
-	    end
+	
+	            waitSeconds(1)
+	        end
+	    end)
 	end
 	
 	-- Reset cycle tracking for a given role
