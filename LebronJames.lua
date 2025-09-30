@@ -9,8 +9,7 @@ return function()
 	-- State and helpers
 	local activeRole
 	local loopConnection
-	local winConnection1
-	local winConnection2
+	local winConnection
 	local isActive = false
 	local restartRole
 	local listenForWin
