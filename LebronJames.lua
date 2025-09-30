@@ -646,8 +646,14 @@ return function()
 	                    print(("⚠️ %s not found! Switching to solo mode... 🧍"):format(targetName))
 	                    -- guard in case role flipped while waiting
 	                    if activeRole == 1 and isActive then
-	                        -- set role to 3 before restart
+	                        -- switch to solo
 	                        activeRole = 3
+	
+	                        -- clear Role 1 state so solo starts clean
+	                        cycleDurations10[1] = {}
+	                        lastCycleTime[1]    = nil
+	                        won, timeoutElapsed = false, false
+	
 	                        if restartRole then
 	                            restartRole(3, 1)
 	                        else
