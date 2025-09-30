@@ -634,38 +634,38 @@ return function()
 	if role == 1 then
 	    task.spawn(function()
 	        local checkStart = os.clock()
-	        local fallbackTriggered = false  -- debounce
+	        local triggered = false
 	        while activeRole == 1 and isActive do
 	            local targetName = usernameBox.Text
 	            local hasName = (targetName ~= nil and targetName ~= "")
 	            local targetPlayer = hasName and Players:FindFirstChild(targetName) or nil
 	
 	            if not targetPlayer and hasName then
-	                if (os.clock() - checkStart) >= 10 and not fallbackTriggered then
-	                    fallbackTriggered = true
-	                    print(("⚠️ %s not found! Switching to solo mode... 🧍"):format(targetName))
-	                    -- guard in case role flipped while waiting
+	                if (os.clock() - checkStart) >= 10 and not triggered then
+	                    triggered = true
+	                    print(("⚠️ %s not found! Switching to SOLO mode 🧍"):format(targetName))
+	
 	                    if activeRole == 1 and isActive then
 	                        -- switch to solo
-	                        activeRole = 3
-	
-	                        -- clear Role 1 state so solo starts clean
-	                        cycleDurations10[1] = {}
-	                        lastCycleTime[1]    = nil
+	                        activeRole, isActive = 3, true
 	                        won, timeoutElapsed = false, false
 	
-	                        if restartRole then
-	                            restartRole(3, 1)
-	                        else
-	                            warn("runLoop: restartRole is nil; cannot switch to solo")
-	                        end
+	                        -- clear Role 3’s cycle tracking so it starts clean
+	                        resetCycles(3)
+	
+	                        -- update UI
+	                        onOffButton.Text = "SOLO mode: ON"
+	                        onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+	
+	                        -- run solo config
+	                        runLoop(3)
 	                    end
 	                    return
 	                end
 	            else
-	                -- reset timer when target is present (continuous-absence logic)
+	                -- reset timer if target is present
 	                checkStart = os.clock()
-	                fallbackTriggered = false
+	                triggered = false
 	            end
 	
 	            waitSeconds(1)
