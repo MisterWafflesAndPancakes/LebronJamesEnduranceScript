@@ -501,6 +501,9 @@ return function()
 	    local myGen = timeoutGen
 	
 	    if role == 1 then
+	        -- Reset win flag for this watchdog window
+	        won = false
+	
 	        -- Player 1: detect win
 	        winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
 	            if activeRole ~= 1 then return end
@@ -508,6 +511,7 @@ return function()
 	                if data.Name == "WinP1" or data.Name == "Win" then
 	                    won = true
 	                    timeoutElapsed = false
+	                    print("✅ Role 1 win detected (event=" .. tostring(data.Name) .. ")")
 	                end
 	            end
 	        end)
