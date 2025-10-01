@@ -412,7 +412,7 @@ return function()
 	end)
 	
 	-- Cold start reset (initialise state once at load)
-	won            = false
+	won = false
 	timeoutElapsed = false
 	
 	-- Reset cycle tracking for roles 1, 2, and 3
@@ -428,7 +428,9 @@ return function()
 	
 	-- Track wins
 	local won = false
-	local timeoutGen = 0
+	
+	-- Role 1 watchdog guard (per-session)
+	local role1WatchdogArmed = false
 	
 	-- Rolling buffer (10 cycles)
 	local cycleDurations10 = { [1] = {}, [2] = {} }
@@ -453,7 +455,9 @@ return function()
 	    local tbl = cycleDurations10[role]
 	    if not tbl or #tbl == 0 then return nil end
 	    local sum = 0
-	    for _, v in ipairs(tbl) do sum = sum + v end
+	    for _, v in ipairs(tbl) do
+	        sum = sum + v
+	    end
 	    return sum / #tbl
 	end
 	
@@ -471,18 +475,26 @@ return function()
 	
 	    isActive = false
 	
-	    -- Schedule the restart
 	    task.delay(delay or 0, function()
 	        if activeRole == role then
-	            -- Reset flags (optionally preserve averages by commenting out the next 2 lines)
+	            -- Reset flags (optionally preserve averages by commenting these)
 	            cycleDurations10[role] = {}
 	            lastCycleTime[role] = nil
 	            won, timeoutElapsed = false, false
 	
+	            -- Disarm watchdog on restart; next listenForWin will re‑arm if needed
+	            if role == 1 then
+	                role1WatchdogArmed = false
+	            end
+	
 	            -- Start fresh
 	            isActive = true
-	            if type(runLoop) == "function" then runLoop(role) end
-	            if type(listenForWin) == "function" then listenForWin(role) end
+	            if type(runLoop) == "function" then
+	                runLoop(role)
+	            end
+	            if type(listenForWin) == "function" then
+	                listenForWin(role)
+	            end
 	
 	            print(("🔄 Role %d restarted after %.2fs"):format(role, delay or 0))
 	        else
@@ -493,23 +505,19 @@ return function()
 	
 	-- Win/timeout detection
 	function listenForWin(role)
-	    if role == 3 or not SoundEvent or not SoundEvent.OnClientEvent then return end
+	    if role == 3 or not SoundEvent or not SoundEvent.OnClientEvent then
+	        return
+	    end
 	
-	    -- Disconnect old connection
+	    -- Refresh event connection for the active role
 	    if winConnection and winConnection.Connected then
 	        winConnection:Disconnect()
 	        winConnection = nil
 	    end
 	
-	    -- Arm generation
-	    timeoutGen = timeoutGen + 1
-	    local myGen = timeoutGen
-	
 	    if role == 1 then
-	        -- Reset win flag for this watchdog window
+	        -- Always listen for "Win" events
 	        won = false
-	
-	        -- Player 1: detect explicit "Win" event (just sets flag)
 	        winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
 	            if activeRole ~= 1 then return end
 	            if action == "Play" and type(data) == "table" and data.Name == "Win" then
@@ -519,27 +527,41 @@ return function()
 	            end
 	        end)
 	
-	        -- Watchdog only triggers if NO win in window
-	        task.spawn(function()
-	            local startTime = os.clock()
-	            local windowSeconds = 15
-	            while os.clock() - startTime < windowSeconds do
-	                if won or activeRole ~= 1 or myGen ~= timeoutGen then
-	                    return -- exit early if win, role change, or new gen armed
+	        -- Arm watchdog only once per Role 1 session
+	        if not role1WatchdogArmed and activeRole == 1 then
+	            role1WatchdogArmed = true
+	            print("⏱️ Role 1 watchdog armed (15s window)")
+	
+	            task.spawn(function()
+	                local startTime = os.clock()
+	                local windowSeconds = 15
+	                while os.clock() - startTime < windowSeconds do
+	                    if won then
+	                        role1WatchdogArmed = false
+	                        return
+	                    end
+	                    if activeRole ~= 1 then
+	                        role1WatchdogArmed = false
+	                        return
+	                    end
+	                    RunService.Heartbeat:Wait()
 	                end
-	                RunService.Heartbeat:Wait()
-	            end
-	            if not won and activeRole == 1 and myGen == timeoutGen then
-	                timeoutElapsed = true
-	                local avg = getCycleAverage(1) or (configs[1] and configs[1].cycleDelay) or 0
-	                local delay = avg + 10
-	                print(("⚠️ Role 1 timed out — restarting after %.2fs (avg=%.3f+10)"):format(delay, avg))
-	                restartRole(1, delay)
-	            end
-	        end)
+	
+	                if not won and activeRole == 1 then
+	                    timeoutElapsed = true
+	                    local avg = getCycleAverage(1) or (configs[1] and configs[1].cycleDelay) or 0
+	                    local delay = avg + 10
+	                    print(("⚠️ Role 1 timed out — restarting after %.2fs (avg=%.3f+10)"):format(delay, avg))
+	                    role1WatchdogArmed = false
+	                    restartRole(1, delay)
+	                else
+	                    role1WatchdogArmed = false
+	                end
+	            end)
+	        end
 	
 	    elseif role == 2 then
-	        -- Player 2: restart immediately on win
+	        -- Role 2: immediate restart on win
 	        winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
 	            if activeRole ~= 2 then return end
 	            if action == "Play" and type(data) == "table" then
@@ -548,7 +570,8 @@ return function()
 	                    timeoutElapsed = false
 	                    local avg = getCycleAverage(2) or (configs[2] and configs[2].cycleDelay) or 0
 	                    local delay = avg + 23
-	                    print(("⚠️ Role 2 win detected — restarting after %.2fs (avg=%.3f+23) [event=%s]"):format(delay, avg, tostring(data.Name)))
+	                    print(("⚠️ Role 2 win detected — restarting after %.2fs (avg=%.3f+23) [event=%s]"):format(
+	                        delay, avg, tostring(data.Name)))
 	                    restartRole(2, delay)
 	                end
 	            end
@@ -556,7 +579,7 @@ return function()
 	    end
 	end
 					
-	-- Core loop (os.clock() based, drift-proof, original style)
+	-- Core loop (drift‑proof, non‑yielding Heartbeat)
 	function runLoop(role)
 	    local points = role == 1 and {
 	        workspace.Spar_Ring1.Player1_Button.CFrame,
@@ -587,6 +610,23 @@ return function()
 	    local phaseStart = os.clock()
 	    local teleported = false
 	
+	    -- track HRP without yielding
+	    local hrp
+	    local function updateHRP(char)
+	        if char then
+	            hrp = char:FindFirstChild("HumanoidRootPart")
+	            if not hrp then
+	                char.ChildAdded:Connect(function(child)
+	                    if child.Name == "HumanoidRootPart" then
+	                        hrp = child
+	                    end
+	                end)
+	            end
+	        end
+	    end
+	    if player.Character then updateHRP(player.Character) end
+	    player.CharacterAdded:Connect(updateHRP)
+	
 	    if loopConnection and loopConnection.Connected then
 	        loopConnection:Disconnect()
 	        loopConnection = nil
@@ -606,12 +646,12 @@ return function()
 	
 	        -- TELEPORT
 	        if phase == "teleport" and elapsed >= config.teleportDelay then
-	            local char = player.Character or player.CharacterAdded:Wait()
-	            local hrp = char:WaitForChild("HumanoidRootPart")
-	            hrp.CFrame = points[index]
-	            teleported = true
-	            phase = "kill"
-	            phaseStart = phaseStart + config.teleportDelay
+	            if hrp then
+	                hrp.CFrame = points[index]
+	                teleported = true
+	                phase = "kill"
+	                phaseStart = phaseStart + config.teleportDelay
+	            end
 	
 	        -- KILL
 	        elseif phase == "kill" and elapsed >= config.deathDelay and teleported then
@@ -625,8 +665,7 @@ return function()
 	
 	        -- RESPAWN
 	        elseif phase == "respawn" then
-	            local char = player.Character or player.CharacterAdded:Wait()
-	            if char:FindFirstChild("HumanoidRootPart") then
+	            if hrp then
 	                if recordCycle then recordCycle(role) end
 	                phase = "wait"
 	                phaseStart = os.clock() -- re‑anchor here since respawn is async
@@ -640,26 +679,29 @@ return function()
 	        end
 	    end)
 	end
-	
-	-- SOLO fallback watcher (only runs if starting as Player 1)
+
+	-- SOLO fallback
 	if role == 1 then
-		task.spawn(function()
-			local checkStart = os.clock()
-			while activeRole == 1 do
-				local targetPlayer = Players:FindFirstChild(usernameBox.Text)
-				if not targetPlayer and os.clock() - checkStart >= 10 then
-					print("Player 2 missing — switching to SOLO")
-					activeRole = nil
-					waitSeconds(1)
-					activeRole = 3
-					runLoop(3)
-					break
-				elseif targetPlayer then
-					checkStart = os.clock()
-				end
-				waitSeconds(1)
-			end
-		end)
+	    task.spawn(function()
+	        local partnerName = usernameBox.Text
+	
+	        -- Immediate check in case partner is already gone
+	        if not Players:FindFirstChild(partnerName) then
+	            print("⚠️ Partner missing at start — switching to SOLO")
+	            handleSoloClick() -- reuse the same SOLO setup
+	            return
+	        end
+	
+	        -- Listen for them leaving
+	        local conn
+	        conn = Players.PlayerRemoving:Connect(function(leavingPlayer)
+	            if leavingPlayer.Name == partnerName and activeRole == 1 then
+	                print("⚠️ Partner left the game — switching to SOLO")
+	                conn:Disconnect()
+	                handleSoloClick() -- reuse the same SOLO setup
+	            end
+	        end)
+	    end)
 	end
 	
 	-- Reset cycle tracking for a given role
