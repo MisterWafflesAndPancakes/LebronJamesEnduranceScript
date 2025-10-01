@@ -40,6 +40,67 @@ return function()
 	if not SoundEvent then
 		warn("❌ 'Sound' RemoteEvent not found in ReplicatedStorage, win detection disabled.")
 	end
+
+	-- Respawn manager 
+	
+	-- Internal state
+	local characterReady = false
+	local lastRespawnTime = nil
+	local deathConnection = nil
+	
+	-- Hook death safely (disconnect old one first)
+	local function hookDeath(humanoid)
+	    if deathConnection then
+	        deathConnection:Disconnect()
+	        deathConnection = nil
+	    end
+	    deathConnection = humanoid.Died:Connect(function()
+	        characterReady = false
+	        if not Players.CharacterAutoLoads then
+	            task.delay(3, function()
+	                if not player.Character or not player.Character:FindFirstChild("Humanoid") then
+	                    warn("⚠️ Forcing manual respawn")
+	                    player:LoadCharacter()
+	                end
+	            end)
+	        end
+	    end)
+	end
+	
+	-- Called when a new character spawns
+	local function onCharacterAdded(char)
+	    char:WaitForChild("Humanoid")
+	    char:WaitForChild("HumanoidRootPart")
+	    characterReady = true
+	    lastRespawnTime = os.clock()
+	    print("✅ Character ready:", char.Name)
+	
+	    local hum = char:FindFirstChild("Humanoid")
+	    if hum then
+	        hookDeath(hum)
+	    end
+	end
+	
+	-- Wire up listeners
+	player.CharacterAdded:Connect(onCharacterAdded)
+	if player.Character then
+	    task.defer(function()
+	        onCharacterAdded(player.Character)
+	    end)
+	end
+	
+	-- Optional: watch server setting
+	print("Server auto‑respawn:", Players.CharacterAutoLoads)
+	Players:GetPropertyChangedSignal("CharacterAutoLoads"):Connect(function()
+	    print("⚠️ Auto‑respawn changed to:", Players.CharacterAutoLoads)
+	end)
+	
+	-- Export helper for your loop
+	_G.RespawnManager = {
+	    IsReady = function() return characterReady end,
+	    LastRespawnTime = function() return lastRespawnTime end,
+	    ForceRespawn = function() player:LoadCharacter() end
+	}
 	
 	-- GUI Setup
 	local screenGui = Instance.new("ScreenGui")
@@ -558,7 +619,7 @@ return function()
 		end
 	end
 					
-	-- Core loop (os.clock() based, drift-proof)
+	-- Core loop (os.clock() based, drift-proof, using RespawnManager)
 	function runLoop(role)
 	    local points = role == 1 and {
 	        workspace.Spar_Ring1.Player1_Button.CFrame,
@@ -606,16 +667,19 @@ return function()
 	        local now = os.clock()
 	        local elapsed = now - phaseStart
 	
+	        -- TELEPORT
 	        if phase == "teleport" and elapsed >= config.teleportDelay then
-	            local char = player.Character or player.CharacterAdded:Wait()
-	            local hrp = char:FindFirstChild("HumanoidRootPart")
-	            if hrp then
-	                hrp.CFrame = points[index]
-	                teleported = true
-	                phase = "kill"
-	                phaseStart = phaseStart + config.teleportDelay -- anchor to schedule
+	            if _G.RespawnManager.IsReady() then
+	                local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+	                if hrp then
+	                    hrp.CFrame = points[index]
+	                    teleported = true
+	                    phase = "kill"
+	                    phaseStart = phaseStart + config.teleportDelay
+	                end
 	            end
 	
+	        -- KILL
 	        elseif phase == "kill" and elapsed >= config.deathDelay and teleported then
 	            local char = player.Character
 	            if char then
@@ -625,15 +689,15 @@ return function()
 	            phase = "respawn"
 	            phaseStart = phaseStart + config.deathDelay
 	
+	        -- RESPAWN
 	        elseif phase == "respawn" then
-	            local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	            if hrp then
-	                -- ✅ Record cycle at respawn (drift-proof anchor)
+	            if _G.RespawnManager.IsReady() then
 	                if recordCycle then recordCycle(role) end
 	                phase = "wait"
 	                phaseStart = os.clock() -- re‑anchor here since respawn is async
 	            end
 	
+	        -- WAIT
 	        elseif phase == "wait" and elapsed >= config.cycleDelay then
 	            phase = "teleport"
 	            phaseStart = phaseStart + config.cycleDelay
@@ -642,20 +706,25 @@ return function()
 	    end)
 	end
 	
-			-- Variable to hold the chosen partner's username (set when Player1 types it)
-		local partnerName = nil
-		
-		-- Capture the username when Player1 presses Enter in the box
-		usernameBox.FocusLost:Connect(function(enterPressed)
-		    if enterPressed then
-		        local typed = usernameBox.Text
-		        if typed and typed ~= "" then
-		            partnerName = typed
-		            print("✅ Partner username set to:", partnerName)
-		        end
-		    end
-		end)
-		
+	-- Variable to hold the chosen partner's username (set when Player1 types it)
+	local partnerName = nil
+	
+	-- Capture the username when Player1 presses Enter in the box
+	usernameBox.FocusLost:Connect(function(enterPressed)
+	    if enterPressed then
+	        local typed = usernameBox.Text:match("^%s*(.-)%s*$") -- trim whitespace
+	        if typed ~= "" then
+	            local partner = Players:FindFirstChild(typed)
+	            if partner then
+	                partnerName = partner.Name -- store canonical name
+	                print("✅ Partner username set to:", partnerName)
+	            else
+	                warn("❌ No player found with that name")
+	            end
+	        end
+	    end
+	end)
+	
 	-- SOLO Fallback: strictly for role 1
 	if role == 1 then
 	    task.spawn(function()
@@ -682,9 +751,7 @@ return function()
 	                        onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
 	
 	                        -- ✅ guard: wait until character is ready before first Solo cycle
-	                        local char = player.Character or player.CharacterAdded:Wait()
-	                        char:WaitForChild("Humanoid")
-	                        char:WaitForChild("HumanoidRootPart")
+	                        repeat RunService.Heartbeat:Wait() until _G.RespawnManager.IsReady()
 	
 	                        runLoop(3)
 	                    end
