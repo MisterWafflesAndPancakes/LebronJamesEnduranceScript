@@ -550,8 +550,8 @@ return function()
 	                if not won and activeRole == 1 then
 	                    timeoutElapsed = true
 	                    local avg = getCycleAverage(1) or (configs[1] and configs[1].cycleDelay) or 0
-	                    local delay = avg + 10
-	                    print(("⚠️ Role 1 timed out — restarting after %.2fs (avg=%.3f+10)"):format(delay, avg))
+	                    local delay = avg + 11
+	                    print(("⚠️ Role 1 timed out — restarting after %.2fs (avg=%.3f+11)"):format(delay, avg))
 	                    role1WatchdogArmed = false
 	                    restartRole(1, delay)
 	                else
@@ -569,8 +569,8 @@ return function()
 	                    won = true
 	                    timeoutElapsed = false
 	                    local avg = getCycleAverage(2) or (configs[2] and configs[2].cycleDelay) or 0
-	                    local delay = avg + 23
-	                    print(("⚠️ Role 2 win detected — restarting after %.2fs (avg=%.3f+23) [event=%s]"):format(
+	                    local delay = avg + 24
+	                    print(("⚠️ Role 2 win detected — restarting after %.2fs (avg=%.3f+24) [event=%s]"):format(
 	                        delay, avg, tostring(data.Name)))
 	                    restartRole(2, delay)
 	                end
