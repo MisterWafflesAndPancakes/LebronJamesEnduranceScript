@@ -360,59 +360,65 @@ return function()
 	
 	-- Force toggle off helper
 	local function forceToggleOff()
-		-- Disconnect loop + win listener(s)
-		if loopConnection and loopConnection.Connected then
-			loopConnection:Disconnect()
-			loopConnection = nil
-		end
-		if winConnection and winConnection.Connected then
-			winConnection:Disconnect()
-			winConnection = nil
-		end
+	    -- If already off, skip
+	    if not activeRole then
+	        return
+	    end
 	
-		-- Reset cycle tracking for the active role
-		if activeRole then
-			cycleDurations10[activeRole] = {}
-			lastCycleTime[activeRole] = nil
-		end
+	    -- Disconnect loop + win listener(s)
+	    if loopConnection and loopConnection.Connected then
+	        loopConnection:Disconnect()
+	        loopConnection = nil
+	    end
+	    if winConnection and winConnection.Connected then
+	        winConnection:Disconnect()
+	        winConnection = nil
+	    end
 	
-		-- Reset state flags
-		activeRole = nil
-		isActive = false
-		won, timeoutElapsed = false, false
+	    -- Reset cycle tracking for all roles (1, 2, 3)
+	    for r = 1, 3 do
+	        cycleDurations10[r] = {}
+	        lastCycleTime[r]    = nil
+	    end
 	
-		-- UI feedback
-		onOffButton.Text = "OFF"
-		onOffButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+	    -- Reset state flags
+	    activeRole      = nil
+	    isActive        = false
+	    won             = false
+	    timeoutElapsed  = false
 	
-		print("Script stopped")
+	    -- UI feedback
+	    onOffButton.Text = "OFF"
+	    onOffButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+	
+	    print("Script stopped")
 	end
 	
 	-- Button connections
 	onOffButton.MouseButton1Click:Connect(function()
-		if handleOnOffClick then
-			handleOnOffClick()
-		else
-			print("ON/OFF clicked but handler not ready yet")
-		end
+	    if handleOnOffClick then
+	        handleOnOffClick()
+	    else
+	        print("ON/OFF clicked but handler not ready yet")
+	    end
 	end)
 	
 	soloButton.MouseButton1Click:Connect(function()
-		if handleSoloClick then
-			handleSoloClick()
-		else
-			print("SOLO clicked but handler not ready yet")
-		end
+	    if handleSoloClick then
+	        handleSoloClick()
+	    else
+	        print("SOLO clicked but handler not ready yet")
+	    end
 	end)
 	
 	-- Cold start reset (initialise state once at load)
-	won = false
+	won            = false
 	timeoutElapsed = false
 	
-	-- Reset cycle tracking for roles 1 and 2
-	cycleDurations10 = { [1] = {}, [2] = {} }
-	lastCycleTime    = { [1] = nil, [2] = nil }
-	
+	-- Reset cycle tracking for roles 1, 2, and 3
+	cycleDurations10 = { [1] = {}, [2] = {}, [3] = {} }
+	lastCycleTime    = { [1] = nil, [2] = nil, [3] = nil }
+		
 	-- Configs
 	local configs = {
 		[1] = { name = "PLAYER 1: DUMMY", teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
@@ -636,20 +642,20 @@ return function()
 	    end)
 	end
 	
-		-- Variable to hold the chosen partner's username (set when Player1 types it)
-	local partnerName = nil
-	
-	-- Capture the username when Player1 presses Enter in the box
-	usernameBox.FocusLost:Connect(function(enterPressed)
-	    if enterPressed then
-	        local typed = usernameBox.Text
-	        if typed and typed ~= "" then
-	            partnerName = typed
-	            print("✅ Partner username set to:", partnerName)
-	        end
-	    end
-	end)
-	
+			-- Variable to hold the chosen partner's username (set when Player1 types it)
+		local partnerName = nil
+		
+		-- Capture the username when Player1 presses Enter in the box
+		usernameBox.FocusLost:Connect(function(enterPressed)
+		    if enterPressed then
+		        local typed = usernameBox.Text
+		        if typed and typed ~= "" then
+		            partnerName = typed
+		            print("✅ Partner username set to:", partnerName)
+		        end
+		    end
+		end)
+		
 	-- SOLO Fallback: strictly for role 1
 	if role == 1 then
 	    task.spawn(function()
@@ -657,11 +663,7 @@ return function()
 	        local triggered = false
 	
 	        while activeRole == 1 and isActive do
-	            local partner = nil
-	            if partnerName then
-	                -- look for that exact username in Players
-	                partner = Players:FindFirstChild(partnerName)
-	            end
+	            local partner = partnerName and Players:FindFirstChild(partnerName)
 	
 	            if not partner then
 	                -- specific partner not in server
@@ -670,16 +672,23 @@ return function()
 	                    print("⚠️ Partner "..tostring(partnerName).." not found! Switching to SOLO mode 🧍")
 	
 	                    if activeRole == 1 and isActive then
-	                        activeRole, isActive = 3, true
+	                        -- ✅ set state before starting loop
+	                        activeRole = 3
+	                        isActive   = true
 	                        won, timeoutElapsed = false, false
 	                        resetCycles(3)
 	
 	                        onOffButton.Text = "SOLO mode: ON"
 	                        onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
 	
+	                        -- ✅ guard: wait until character is ready before first Solo cycle
+	                        local char = player.Character or player.CharacterAdded:Wait()
+	                        char:WaitForChild("Humanoid")
+	                        char:WaitForChild("HumanoidRootPart")
+	
 	                        runLoop(3)
 	                    end
-	                    return
+	                    break -- cleaner than return
 	                end
 	            else
 	                -- partner present, reset timer
@@ -747,16 +756,25 @@ return function()
 	end
 	
 	handleSoloClick = function()
-		forceToggleOff()
-		waitSeconds(1)
+	    -- cleanly stop any existing loop
+	    forceToggleOff()
+	    waitSeconds(1)
 	
-		activeRole, isActive = 3, true
-		won, timeoutElapsed = false, false
-		resetCycles(3)
+	    -- ✅ set state explicitly before starting loop
+	    activeRole = 3
+	    isActive   = true
+	    won, timeoutElapsed = false, false
+	    resetCycles(3)
 	
-		onOffButton.Text = "SOLO mode: ON"
-		onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+	    onOffButton.Text = "SOLO mode: ON"
+	    onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
 	
-		runLoop(3)
+	    -- ✅ guard: ensure character is ready before first Solo cycle
+	    local char = player.Character or player.CharacterAdded:Wait()
+	    char:WaitForChild("Humanoid")
+	    char:WaitForChild("HumanoidRootPart")
+	
+	    -- start the Solo loop
+	    runLoop(3)
 	end
 end
