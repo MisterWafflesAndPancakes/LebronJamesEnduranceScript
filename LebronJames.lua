@@ -40,67 +40,6 @@ return function()
 	if not SoundEvent then
 		warn("❌ 'Sound' RemoteEvent not found in ReplicatedStorage, win detection disabled.")
 	end
-
-	-- Respawn manager 
-	
-	-- Internal state
-	local characterReady = false
-	local lastRespawnTime = nil
-	local deathConnection = nil
-	
-	-- Hook death safely (disconnect old one first)
-	local function hookDeath(humanoid)
-	    if deathConnection then
-	        deathConnection:Disconnect()
-	        deathConnection = nil
-	    end
-	    deathConnection = humanoid.Died:Connect(function()
-	        characterReady = false
-	        if not Players.CharacterAutoLoads then
-	            task.delay(3, function()
-	                if not player.Character or not player.Character:FindFirstChild("Humanoid") then
-	                    warn("⚠️ Forcing manual respawn")
-	                    player:LoadCharacter()
-	                end
-	            end)
-	        end
-	    end)
-	end
-	
-	-- Called when a new character spawns
-	local function onCharacterAdded(char)
-	    char:WaitForChild("Humanoid")
-	    char:WaitForChild("HumanoidRootPart")
-	    characterReady = true
-	    lastRespawnTime = os.clock()
-	    print("✅ Character ready:", char.Name)
-	
-	    local hum = char:FindFirstChild("Humanoid")
-	    if hum then
-	        hookDeath(hum)
-	    end
-	end
-	
-	-- Wire up listeners
-	player.CharacterAdded:Connect(onCharacterAdded)
-	if player.Character then
-	    task.defer(function()
-	        onCharacterAdded(player.Character)
-	    end)
-	end
-	
-	-- Optional: watch server setting
-	print("Server auto‑respawn:", Players.CharacterAutoLoads)
-	Players:GetPropertyChangedSignal("CharacterAutoLoads"):Connect(function()
-	    print("⚠️ Auto‑respawn changed to:", Players.CharacterAutoLoads)
-	end)
-	
-	-- Export helper for your loop
-	_G.RespawnManager = {
-	    IsReady = function() return characterReady end,
-	    LastRespawnTime = function() return lastRespawnTime end,
-	    ForceRespawn = function() player:LoadCharacter() end
-	}
 	
 	-- GUI Setup
 	local screenGui = Instance.new("ScreenGui")
@@ -619,7 +558,7 @@ return function()
 		end
 	end
 					
-	-- Core loop (os.clock() based, drift-proof, using RespawnManager)
+	-- Core loop (os.clock() based, drift-proof, original style)
 	function runLoop(role)
 	    local points = role == 1 and {
 	        workspace.Spar_Ring1.Player1_Button.CFrame,
@@ -669,15 +608,12 @@ return function()
 	
 	        -- TELEPORT
 	        if phase == "teleport" and elapsed >= config.teleportDelay then
-	            if _G.RespawnManager.IsReady() then
-	                local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-	                if hrp then
-	                    hrp.CFrame = points[index]
-	                    teleported = true
-	                    phase = "kill"
-	                    phaseStart = phaseStart + config.teleportDelay
-	                end
-	            end
+	            local char = player.Character or player.CharacterAdded:Wait()
+	            local hrp = char:WaitForChild("HumanoidRootPart")
+	            hrp.CFrame = points[index]
+	            teleported = true
+	            phase = "kill"
+	            phaseStart = phaseStart + config.teleportDelay
 	
 	        -- KILL
 	        elseif phase == "kill" and elapsed >= config.deathDelay and teleported then
@@ -691,7 +627,8 @@ return function()
 	
 	        -- RESPAWN
 	        elseif phase == "respawn" then
-	            if _G.RespawnManager.IsReady() then
+	            local char = player.Character or player.CharacterAdded:Wait()
+	            if char:FindFirstChild("HumanoidRootPart") then
 	                if recordCycle then recordCycle(role) end
 	                phase = "wait"
 	                phaseStart = os.clock() -- re‑anchor here since respawn is async
@@ -751,7 +688,9 @@ return function()
 	                        onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
 	
 	                        -- ✅ guard: wait until character is ready before first Solo cycle
-	                        repeat RunService.Heartbeat:Wait() until _G.RespawnManager.IsReady()
+	                        local char = player.Character or player.CharacterAdded:Wait()
+	                        char:WaitForChild("Humanoid")
+	                        char:WaitForChild("HumanoidRootPart")
 	
 	                        runLoop(3)
 	                    end
