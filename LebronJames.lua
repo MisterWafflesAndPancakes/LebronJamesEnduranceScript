@@ -436,124 +436,124 @@ return function()
 	
 	-- Record a completed cycle
 	local function recordCycle(role)
-		local now = os.clock()
-		local last = lastCycleTime[role]
-		if last then
-			local duration = now - last
-			table.insert(cycleDurations10[role], duration)
-			if #cycleDurations10[role] > 10 then
-				table.remove(cycleDurations10[role], 1)
-			end
-		end
-		lastCycleTime[role] = now
+	    local now = os.clock()
+	    local last = lastCycleTime[role]
+	    if last then
+	        local duration = now - last
+	        table.insert(cycleDurations10[role], duration)
+	        if #cycleDurations10[role] > 10 then
+	            table.remove(cycleDurations10[role], 1)
+	        end
+	    end
+	    lastCycleTime[role] = now
 	end
 	
 	-- Compute average cycle length
 	local function getCycleAverage(role)
-		local tbl = cycleDurations10[role]
-		if not tbl or #tbl == 0 then return nil end
-		local sum = 0
-		for _, v in ipairs(tbl) do sum = sum + v end
-		return sum / #tbl
+	    local tbl = cycleDurations10[role]
+	    if not tbl or #tbl == 0 then return nil end
+	    local sum = 0
+	    for _, v in ipairs(tbl) do sum = sum + v end
+	    return sum / #tbl
 	end
 	
 	-- Restart a role after a delay, ensuring the old loop is stopped first
 	function restartRole(role, delay)
-		-- Stop any existing loop/listeners
-		if loopConnection and loopConnection.Connected then
-			loopConnection:Disconnect()
-			loopConnection = nil
-		end
-		if winConnection and winConnection.Connected then
-			winConnection:Disconnect()
-			winConnection = nil
-		end
+	    -- Stop any existing loop/listeners
+	    if loopConnection and loopConnection.Connected then
+	        loopConnection:Disconnect()
+	        loopConnection = nil
+	    end
+	    if winConnection and winConnection.Connected then
+	        winConnection:Disconnect()
+	        winConnection = nil
+	    end
 	
-		isActive = false
+	    isActive = false
 	
-		-- Schedule the restart
-		task.delay(delay or 0, function()
-			if activeRole == role then
-				-- Reset flags (optionally preserve averages by commenting out the next 2 lines)
-				cycleDurations10[role] = {}
-				lastCycleTime[role] = nil
-				won, timeoutElapsed = false, false
+	    -- Schedule the restart
+	    task.delay(delay or 0, function()
+	        if activeRole == role then
+	            -- Reset flags (optionally preserve averages by commenting out the next 2 lines)
+	            cycleDurations10[role] = {}
+	            lastCycleTime[role] = nil
+	            won, timeoutElapsed = false, false
 	
-				-- Start fresh
-				isActive = true
-				if type(runLoop) == "function" then runLoop(role) end
-				if type(listenForWin) == "function" then listenForWin(role) end
+	            -- Start fresh
+	            isActive = true
+	            if type(runLoop) == "function" then runLoop(role) end
+	            if type(listenForWin) == "function" then listenForWin(role) end
 	
-				print(("🔄 Role %d restarted after %.2fs"):format(role, delay or 0))
-			else
-				print(("ℹ️ Restart for role %d skipped (activeRole changed)"):format(role))
-			end
-		end)
+	            print(("🔄 Role %d restarted after %.2fs"):format(role, delay or 0))
+	        else
+	            print(("ℹ️ Restart for role %d skipped (activeRole changed)"):format(role))
+	        end
+	    end)
 	end
 	
 	-- Win/timeout detection
 	function listenForWin(role)
-		if role == 3 or not SoundEvent or not SoundEvent.OnClientEvent then return end
+	    if role == 3 or not SoundEvent or not SoundEvent.OnClientEvent then return end
 	
-		-- Disconnect old connection
-		if winConnection and winConnection.Connected then
-			winConnection:Disconnect()
-			winConnection = nil
-		end
+	    -- Disconnect old connection
+	    if winConnection and winConnection.Connected then
+	        winConnection:Disconnect()
+	        winConnection = nil
+	    end
 	
-		-- Arm generation
-		timeoutGen = timeoutGen + 1
-		local myGen = timeoutGen
+	    -- Arm generation
+	    timeoutGen = timeoutGen + 1
+	    local myGen = timeoutGen
 	
-		if role == 1 then
-			-- Reset win flag for this watchdog window
-			won = false
+	    if role == 1 then
+	        -- Reset win flag for this watchdog window
+	        won = false
 	
-			-- Player 1: detect explicit "Win" event
-			winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
-			    if activeRole ~= 1 then return end
-			    if action == "Play" and type(data) == "table" and data.Name == "Win" then
-			        won = true
-			        timeoutElapsed = false
-			    end
-			end)
+	        -- Player 1: detect explicit "Win" event (just sets flag)
+	        winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
+	            if activeRole ~= 1 then return end
+	            if action == "Play" and type(data) == "table" and data.Name == "Win" then
+	                won = true
+	                timeoutElapsed = false
+	                print("✅ Role 1 win event received")
+	            end
+	        end)
 	
-			-- Watchdog only triggers if NO win in window
-			task.spawn(function()
-				local startTime = os.clock()
-				local windowSeconds = 15
-				while os.clock() - startTime < windowSeconds do
-					if won or activeRole ~= 1 or myGen ~= timeoutGen then
-						return -- exit early if win or role change
-					end
-					RunService.Heartbeat:Wait()
-				end
-				if not won and activeRole == 1 and myGen == timeoutGen then
-					timeoutElapsed = true
-					timeoutGen = timeoutGen + 1 -- only increment when timeout actually fires
-					local avg = getCycleAverage(1) or (configs[1] and configs[1].cycleDelay) or 0
-					local delay = avg + 10
-					print(("⚠️ Role 1 timed out — restarting after %.2fs (avg=%.3f+10)"):format(delay, avg))
-					restartRole(1, delay)
-				end
-			end)
+	        -- Watchdog only triggers if NO win in window
+	        task.spawn(function()
+	            local startTime = os.clock()
+	            local windowSeconds = 15
+	            while os.clock() - startTime < windowSeconds do
+	                if won or activeRole ~= 1 or myGen ~= timeoutGen then
+	                    return -- exit early if win, role change, or new gen armed
+	                end
+	                RunService.Heartbeat:Wait()
+	            end
+	            if not won and activeRole == 1 and myGen == timeoutGen then
+	                timeoutElapsed = true
+	                local avg = getCycleAverage(1) or (configs[1] and configs[1].cycleDelay) or 0
+	                local delay = avg + 10
+	                print(("⚠️ Role 1 timed out — restarting after %.2fs (avg=%.3f+10)"):format(delay, avg))
+	                restartRole(1, delay)
+	            end
+	        end)
 	
-		elseif role == 2 then
-			-- Player 2: restart immediately on win
-			winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
-				if activeRole ~= 2 then return end
-				if action == "Play" and type(data) == "table" then
-					if data.Name == "WinP2" or data.Name == "Win" then
-						won = true
-						timeoutElapsed = false
-						local avg = getCycleAverage(2) or (configs[2] and configs[2].cycleDelay) or 0
-						local delay = avg + 23
-						print(("⚠️ Role 2 win detected — restarting after %.2fs (avg=%.3f+23) [event=%s]"):format(delay, avg, tostring(data.Name)))
-						restartRole(2, delay)
-					end
-				end
-			end)
-		end
+	    elseif role == 2 then
+	        -- Player 2: restart immediately on win
+	        winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
+	            if activeRole ~= 2 then return end
+	            if action == "Play" and type(data) == "table" then
+	                if data.Name == "WinP2" or data.Name == "Win" then
+	                    won = true
+	                    timeoutElapsed = false
+	                    local avg = getCycleAverage(2) or (configs[2] and configs[2].cycleDelay) or 0
+	                    local delay = avg + 23
+	                    print(("⚠️ Role 2 win detected — restarting after %.2fs (avg=%.3f+23) [event=%s]"):format(delay, avg, tostring(data.Name)))
+	                    restartRole(2, delay)
+	                end
+	            end
+	        end)
+	    end
 	end
 					
 	-- Core loop (os.clock() based, drift-proof, original style)
@@ -650,14 +650,14 @@ return function()
 				if not targetPlayer and os.clock() - checkStart >= 10 then
 					print("Player 2 missing — switching to SOLO")
 					activeRole = nil
-					WaitSeconds(1)
+					waitSeconds(1)
 					activeRole = 3
 					runLoop(3)
 					break
 				elseif targetPlayer then
 					checkStart = os.clock()
 				end
-				WaitSeconds(1)
+				waitSeconds(1)
 			end
 		end)
 	end
