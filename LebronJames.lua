@@ -641,71 +641,25 @@ return function()
 	    end)
 	end
 	
-	-- Partner chosen by Player 1
-	local partnerName = nil
-	
-	-- Capture typed partner name
-	usernameBox.FocusLost:Connect(function(enterPressed)
-	    if enterPressed then
-	        local typed = usernameBox.Text:match("^%s*(.-)%s*$")
-	        if typed ~= "" then
-	            local partner = Players:FindFirstChild(typed)
-	            if partner then
-	                partnerName = partner.Name
-	                print("✅ Partner username set to:", partnerName)
-	            else
-	                warn("❌ No player found with that name")
-	            end
-	        end
-	    end
-	end)
-	
-	-- SOLO fallback: only for Role 1
+	-- SOLO fallback watcher (only runs if starting as Player 1)
 	if role == 1 then
-	    task.spawn(function()
-	        local checkStart = os.clock()
-	        local triggered = false
-	
-	        while activeRole == 1 and isActive do
-	            if partnerName then
-	                local partner = Players:FindFirstChild(partnerName)
-	
-	                if not partner then
-	                    -- partner missing
-	                    if (os.clock() - checkStart) >= 10 and not triggered then
-	                        triggered = true
-	                        print("⚠️ The player "..partnerName.." has been missing for 10s, switching to solo mode! 🧍")
-	
-	                        if activeRole == 1 and isActive then
-	                            activeRole = 3
-	                            isActive   = true
-	                            won, timeoutElapsed = false, false
-	                            resetCycles(3)
-	
-	                            onOffButton.Text = "SOLO mode: ON"
-	                            onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
-	
-	                            local char = player.Character or player.CharacterAdded:Wait()
-	                            char:WaitForChild("Humanoid")
-	                            char:WaitForChild("HumanoidRootPart")
-	
-	                            runLoop(3)
-	                        end
-	                        break
-	                    end
-	                else
-	                    -- partner present, reset timer
-	                    checkStart = os.clock()
-	                    triggered = false
-	                end
-	            else
-	                -- no partner typed yet, keep resetting
-	                checkStart = os.clock()
-	            end
-	
-	            waitSeconds(1)
-	        end
-	    end)
+		task.spawn(function()
+			local checkStart = os.clock()
+			while activeRole == 1 do
+				local targetPlayer = Players:FindFirstChild(usernameBox.Text)
+				if not targetPlayer and os.clock() - checkStart >= 10 then
+					print("Player 2 missing — switching to SOLO")
+					activeRole = nil
+					WaitSeconds(1)
+					activeRole = 3
+					runLoop(3)
+					break
+				elseif targetPlayer then
+					checkStart = os.clock()
+				end
+				WaitSeconds(1)
+			end
+		end)
 	end
 	
 	-- Reset cycle tracking for a given role
