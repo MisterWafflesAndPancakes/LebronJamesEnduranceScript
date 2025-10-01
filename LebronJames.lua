@@ -189,7 +189,7 @@ return function()
 			VirtualUser:CaptureController()
 			VirtualUser:ClickButton2(Vector2.new())
 		end)
-		print("✅ Anti-AFK script executed again")
+		print("✅ Anti-AFK script executed")
 	end)
 	
 	-- Endurance Checker label
@@ -509,15 +509,13 @@ return function()
 			-- Reset win flag for this watchdog window
 			won = false
 	
-			-- Player 1: detect win
+			-- Player 1: detect explicit "Win" event
 			winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
-				if activeRole ~= 1 then return end
-				if action == "Play" and type(data) == "table" then
-					if data.Name == "WinP1" or data.Name == "Win" then
-						won = true
-						timeoutElapsed = false
-					end
-				end
+			    if activeRole ~= 1 then return end
+			    if action == "Play" and type(data) == "table" and data.Name == "Win" then
+			        won = true
+			        timeoutElapsed = false
+			    end
 			end)
 	
 			-- Watchdog only triggers if NO win in window
@@ -549,8 +547,8 @@ return function()
 						won = true
 						timeoutElapsed = false
 						local avg = getCycleAverage(2) or (configs[2] and configs[2].cycleDelay) or 0
-						local delay = avg + 22.5
-						print(("⚠️ Role 2 win detected — restarting after %.2fs (avg=%.3f+22.5) [event=%s]"):format(delay, avg, tostring(data.Name)))
+						local delay = avg + 23
+						print(("⚠️ Role 2 win detected — restarting after %.2fs (avg=%.3f+23) [event=%s]"):format(delay, avg, tostring(data.Name)))
 						restartRole(2, delay)
 					end
 				end
@@ -643,17 +641,17 @@ return function()
 	    end)
 	end
 	
-	-- Variable to hold the chosen partner's username (set when Player1 types it)
+	-- Partner chosen by Player 1
 	local partnerName = nil
 	
-	-- Capture the username when Player1 presses Enter in the box
+	-- Capture typed partner name
 	usernameBox.FocusLost:Connect(function(enterPressed)
 	    if enterPressed then
-	        local typed = usernameBox.Text:match("^%s*(.-)%s*$") -- trim whitespace
+	        local typed = usernameBox.Text:match("^%s*(.-)%s*$")
 	        if typed ~= "" then
 	            local partner = Players:FindFirstChild(typed)
 	            if partner then
-	                partnerName = partner.Name -- store canonical name
+	                partnerName = partner.Name
 	                print("✅ Partner username set to:", partnerName)
 	            else
 	                warn("❌ No player found with that name")
@@ -662,47 +660,50 @@ return function()
 	    end
 	end)
 	
-	-- SOLO Fallback: strictly for role 1
+	-- SOLO fallback: only for Role 1
 	if role == 1 then
 	    task.spawn(function()
 	        local checkStart = os.clock()
 	        local triggered = false
 	
 	        while activeRole == 1 and isActive do
-	            local partner = partnerName and Players:FindFirstChild(partnerName)
+	            if partnerName then
+	                local partner = Players:FindFirstChild(partnerName)
 	
-	            if not partner then
-	                -- specific partner not in server
-	                if (os.clock() - checkStart) >= 10 and not triggered then
-	                    triggered = true
-	                    print("⚠️ Partner "..tostring(partnerName).." not found! Switching to SOLO mode 🧍")
+	                if not partner then
+	                    -- partner missing
+	                    if (os.clock() - checkStart) >= 10 and not triggered then
+	                        triggered = true
+	                        print("⚠️ The player "..partnerName.." has been missing for 10s, switching to solo mode! 🧍")
 	
-	                    if activeRole == 1 and isActive then
-	                        -- ✅ set state before starting loop
-	                        activeRole = 3
-	                        isActive   = true
-	                        won, timeoutElapsed = false, false
-	                        resetCycles(3)
+	                        if activeRole == 1 and isActive then
+	                            activeRole = 3
+	                            isActive   = true
+	                            won, timeoutElapsed = false, false
+	                            resetCycles(3)
 	
-	                        onOffButton.Text = "SOLO mode: ON"
-	                        onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+	                            onOffButton.Text = "SOLO mode: ON"
+	                            onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
 	
-	                        -- ✅ guard: wait until character is ready before first Solo cycle
-	                        local char = player.Character or player.CharacterAdded:Wait()
-	                        char:WaitForChild("Humanoid")
-	                        char:WaitForChild("HumanoidRootPart")
+	                            local char = player.Character or player.CharacterAdded:Wait()
+	                            char:WaitForChild("Humanoid")
+	                            char:WaitForChild("HumanoidRootPart")
 	
-	                        runLoop(3)
+	                            runLoop(3)
+	                        end
+	                        break
 	                    end
-	                    break -- cleaner than return
+	                else
+	                    -- partner present, reset timer
+	                    checkStart = os.clock()
+	                    triggered = false
 	                end
 	            else
-	                -- partner present, reset timer
+	                -- no partner typed yet, keep resetting
 	                checkStart = os.clock()
-	                triggered = false
 	            end
 	
-	            waitSeconds(1) -- drift‑proof 1s wait
+	            waitSeconds(1)
 	        end
 	    end)
 	end
