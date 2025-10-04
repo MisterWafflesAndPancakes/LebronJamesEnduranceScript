@@ -421,8 +421,8 @@ return function()
 		
 	-- Configs
 	local configs = {
-		[1] = { name = "PLAYER 1: DUMMY", teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
-		[2] = { name = "PLAYER 2: MAIN",  teleportDelay = 0.3, deathDelay = 0.5, cycleDelay = 5.8 },
+		[1] = { name = "PLAYER 1: DUMMY", teleportDelay = 0.2, deathDelay = 0.2, cycleDelay = 5.6 },
+		[2] = { name = "PLAYER 2: MAIN",  teleportDelay = 0.2, deathDelay = 0.2, cycleDelay = 5.6 },
 		[3] = { name = "SOLO MODE",       teleportDelay = 0.2, deathDelay = 0.2, cycleDelay = 5.6 }
 	}
 	
