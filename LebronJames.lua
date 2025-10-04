@@ -16,6 +16,7 @@ return function()
 	local runLoop
 	local recordCycle
 	local getCycleAverage   -- renamed for clarity (10‑cycle only)
+	local switchToSolo
 	
 	-- Handlers (assigned later)
 	local handleOnOffClick
@@ -348,7 +349,7 @@ return function()
 	
 		if level and xp then
 			local function updateEndurance()
-				enduranceLabel.Text = string.format("Endurance Lv %d | XP %d", level.Value, xp.Value)
+				enduranceLabel.Text = string.format("Endurance level: %d | XP: %d", level.Value, xp.Value)
 			end
 			updateEndurance()
 			level:GetPropertyChangedSignal("Value"):Connect(updateEndurance)
@@ -382,10 +383,10 @@ return function()
 	    end
 	
 	    -- Reset state flags
-	    activeRole      = nil
-	    isActive        = false
-	    won             = false
-	    timeoutElapsed  = false
+	    activeRole = nil
+	    isActive = false
+	    won = false
+	    timeoutElapsed = false
 	
 	    -- UI feedback
 	    onOffButton.Text = "OFF"
@@ -426,8 +427,9 @@ return function()
 		[3] = { name = "SOLO MODE",       teleportDelay = 0.2, deathDelay = 0.2, cycleDelay = 5.6 }
 	}
 	
-	-- Track wins
+	-- Track wins / state
 	local won = false
+	local timeoutElapsed = false
 	
 	-- Role 1 watchdog guard (per-session)
 	local role1WatchdogArmed = false
@@ -435,6 +437,9 @@ return function()
 	-- Rolling buffer (10 cycles)
 	local cycleDurations10 = { [1] = {}, [2] = {} }
 	local lastCycleTime    = { [1] = nil, [2] = nil }
+	
+	-- Services
+	local RunService = game:GetService("RunService")
 	
 	-- Record a completed cycle
 	local function recordCycle(role)
@@ -536,13 +541,8 @@ return function()
 	                local startTime = os.clock()
 	                local windowSeconds = 15
 	                while os.clock() - startTime < windowSeconds do
-	                    if won then
-	                        role1WatchdogArmed = false
-	                        return
-	                    end
-	                    if activeRole ~= 1 then
-	                        role1WatchdogArmed = false
-	                        return
+	                    if won or activeRole ~= 1 then
+	                        return -- exit quietly, don't disarm here
 	                    end
 	                    RunService.Heartbeat:Wait()
 	                end
@@ -551,11 +551,8 @@ return function()
 	                    timeoutElapsed = true
 	                    local avg = getCycleAverage(1) or (configs[1] and configs[1].cycleDelay) or 0
 	                    local delay = avg + 11
-	                    print(("⚠️ Role 1 timed out — restarting after %.2fs (avg=%.3f+11)"):format(delay, avg))
-	                    role1WatchdogArmed = false
+	                    print(("⚠️ Role 1 timed out! restarting after %.2fs (avg=%.3f+11)"):format(delay, avg))
 	                    restartRole(1, delay)
-	                else
-	                    role1WatchdogArmed = false
 	                end
 	            end)
 	        end
@@ -570,7 +567,7 @@ return function()
 	                    timeoutElapsed = false
 	                    local avg = getCycleAverage(2) or (configs[2] and configs[2].cycleDelay) or 0
 	                    local delay = avg + 24
-	                    print(("⚠️ Role 2 win detected — restarting after %.2fs (avg=%.3f+24) [event=%s]"):format(
+	                    print(("⚠️ Role 2 win detected! restarting after %.2fs (avg=%.3f+24) [event=%s]"):format(
 	                        delay, avg, tostring(data.Name)))
 	                    restartRole(2, delay)
 	                end
@@ -583,10 +580,12 @@ return function()
 	function runLoop(role)
 	    local points = role == 1 and {
 	        workspace.Spar_Ring1.Player1_Button.CFrame,
-	        workspace.Spar_Ring4.Player1_Button.CFrame
+	        workspace.Spar_Ring4.Player1_Button.CFrame,
+			workspace.Spar_Ring2.Player1_Button.CFrame
 	    } or role == 2 and {
 	        workspace.Spar_Ring1.Player2_Button.CFrame,
-	        workspace.Spar_Ring4.Player2_Button.CFrame
+	        workspace.Spar_Ring4.Player2_Button.CFrame,
+			workspace.Spar_Ring2.Player2_Button.CFrame
 	    } or role == 3 and {
 	        workspace.Spar_Ring2.Player1_Button.CFrame,
 	        workspace.Spar_Ring2.Player2_Button.CFrame,
@@ -653,7 +652,7 @@ return function()
 	                phaseStart = phaseStart + config.teleportDelay
 	            end
 	
-	        -- KILL
+	        -- Kill phase
 	        elseif phase == "kill" and elapsed >= config.deathDelay and teleported then
 	            local char = player.Character
 	            if char then
@@ -663,7 +662,7 @@ return function()
 	            phase = "respawn"
 	            phaseStart = phaseStart + config.deathDelay
 	
-	        -- RESPAWN
+	        -- respawn phase
 	        elseif phase == "respawn" then
 	            if hrp then
 	                if recordCycle then recordCycle(role) end
@@ -671,7 +670,7 @@ return function()
 	                phaseStart = os.clock() -- re‑anchor here since respawn is async
 	            end
 	
-	        -- WAIT
+	        -- waiting phase
 	        elseif phase == "wait" and elapsed >= config.cycleDelay then
 	            phase = "teleport"
 	            phaseStart = phaseStart + config.cycleDelay
@@ -680,28 +679,32 @@ return function()
 	    end)
 	end
 
-	-- SOLO fallback
+	-- SOLO fallback (only runs if starting as Player 1)
 	if role == 1 then
-	    task.spawn(function()
-	        local partnerName = usernameBox.Text
+	    local partner = Players:FindFirstChild(usernameBox.Text)
+	    local partnerId = partner and partner.UserId
+	    local soloTriggered = false
+	    local conn
 	
-	        -- Immediate check in case partner is already gone
-	        if not Players:FindFirstChild(partnerName) then
-	            print("⚠️ Partner missing at start — switching to SOLO")
-	            handleSoloClick() -- reuse the same SOLO setup
-	            return
+	    local function switchToSolo(reason)
+	        if soloTriggered then return end
+	        soloTriggered = true
+	        if conn then
+	            conn:Disconnect()
+	            conn = nil
 	        end
+	        print(("⚠️ Partner %s — switching to SOLO"):format(reason))
+	        handleSoloClick() -- reuse the same SOLO setup
+	    end
 	
-	        -- Listen for them leaving
-	        local conn
+	    -- Only set up a listener if the partner exists
+	    if partner then
 	        conn = Players.PlayerRemoving:Connect(function(leavingPlayer)
-	            if leavingPlayer.Name == partnerName and activeRole == 1 then
-	                print("⚠️ Partner left the game — switching to SOLO")
-	                conn:Disconnect()
-	                handleSoloClick() -- reuse the same SOLO setup
+	            if leavingPlayer.UserId == partnerId and activeRole == 1 then
+	                switchToSolo("left the game")
 	            end
 	        end)
-	    end)
+	    end
 	end
 	
 	-- Reset cycle tracking for a given role
@@ -765,7 +768,7 @@ return function()
 	
 	    -- ✅ set state explicitly before starting loop
 	    activeRole = 3
-	    isActive   = true
+	    isActive = true
 	    won, timeoutElapsed = false, false
 	    resetCycles(3)
 	
