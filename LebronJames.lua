@@ -693,15 +693,34 @@ return function()
 	            conn:Disconnect()
 	            conn = nil
 	        end
-	        print(("⚠️ Partner %s — switching to SOLO"):format(reason))
-	        handleSoloClick() -- reuse the same SOLO setup
+	        print(("⚠️ Cannot find %s ! switching to SOLO"):format(reason))
+	        handleSoloClick()
 	    end
 	
-	    -- Only set up a listener if the partner exists
+	    -- Only set up listener if partner exists
 	    if partner then
 	        conn = Players.PlayerRemoving:Connect(function(leavingPlayer)
 	            if leavingPlayer.UserId == partnerId and activeRole == 1 then
-	                switchToSolo("left the game")
+	                print("⚠️ No player 2.. waiting 12s for rejoin")
+	
+	                -- Start a 12s grace period
+	                task.spawn(function()
+	                    local start = os.clock()
+	                    while os.clock() - start < 12 do
+	                        -- Check if partner rejoined
+	                        local rejoined = Players:FindFirstChild(usernameBox.Text)
+	                        if rejoined and rejoined.UserId == partnerId then
+	                            print("✅ Partner rejoined within 12s, staying in duo mode")
+	                            return
+	                        end
+	                        RunService.Heartbeat:Wait()
+	                    end
+	
+	                    -- If we reach here, partner never came back
+	                    if activeRole == 1 then
+	                        switchToSolo("Cannot be found! Switching to solo endurance")
+	                    end
+	                end)
 	            end
 	        end)
 	    end
