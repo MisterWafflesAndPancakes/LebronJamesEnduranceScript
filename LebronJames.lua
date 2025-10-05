@@ -381,8 +381,8 @@ return function()
 	    -- Reset cycle tracking + restart tokens for roles 1 & 2 only
 	    for r = 1, 2 do
 	        cycleDurations10[r] = {}
-	        lastCycleTime[r]    = nil
-	        restartToken[r]     = 0
+	        lastCycleTime[r] = nil
+	        restartToken[r] = 0
 	    end
 	
 	    -- Reset state flags
@@ -397,11 +397,11 @@ return function()
 	        onOffButton.Text = "OFF"
 	        onOffButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
 	    end
-	    if soloButton then
-	        soloButton.Text = "SOLO"
-	        soloButton.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+		if soloButton then
+		    soloButton.Text = "SOLO"
+		    soloButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255) -- bright blue, not gray
+		    soloButton.AutoButtonColor = false -- stop Roblox from tinting it gray
 	    end
-	
 	    print("Script stopped")
 	end
 	
@@ -427,9 +427,9 @@ return function()
 	
 	-- Configs
 	local configs = {
-	    [1] = { name = "PLAYER 1: DUMMY", teleportDelay = 0.8, deathDelay = 0.2, cycleDelay = 5 },
-	    [2] = { name = "PLAYER 2: MAIN",  teleportDelay = 0.8, deathDelay = 0.2, cycleDelay = 5 },
-	    [3] = { name = "SOLO MODE",       teleportDelay = 0.8, deathDelay = 0.2, cycleDelay = 5 }
+	    [1] = { name = "PLAYER 1: DUMMY", teleportDelay = 0.2, deathDelay = 0.2, cycleDelay = 5.6 },
+	    [2] = { name = "PLAYER 2: MAIN",  teleportDelay = 0.2, deathDelay = 0.2, cycleDelay = 5.6 },
+	    [3] = { name = "SOLO MODE",       teleportDelay = 0.2, deathDelay = 0.2, cycleDelay = 5.6 }
 	}
 	
 	-- Track wins / state
@@ -480,7 +480,7 @@ return function()
 	function restartRole(role, delay)
 	    -- SOLO mode: no restart logic
 	    if role == 3 then
-	        warn("SOLO mode does not support restart logic")
+	        warn("Solo mode does not utilise external parameters such as restarting.")
 	        return
 	    end
 	
@@ -611,7 +611,7 @@ return function()
 	    end
 	end
 					
-	-- Core loop (drift‑proof, non‑yielding Heartbeat and HRP with triple CFrame)
+	-- Core loop (drift‑proof, anchored to absolute schedule)
 	function runLoop(role)
 	    local points = role == 1 and {
 	        workspace.Spar_Ring1.Player1_Button.CFrame,
@@ -641,7 +641,7 @@ return function()
 	
 	    local index = 1
 	    local phase = "teleport"
-	    local phaseStart = os.clock()
+	    local phaseStart = os.clock()         -- anchor to absolute time
 	    local teleported = false
 	
 	    -- track HRP without yielding
@@ -679,144 +679,141 @@ return function()
 	        end
 	
 	        local now = os.clock()
-	        local elapsed = now - phaseStart
 	
 	        -- TELEPORT
-	        if phase == "teleport" and elapsed >= config.teleportDelay then
+	        if phase == "teleport" and now >= phaseStart + config.teleportDelay then
 	            if hrp then
 	                hrp.CFrame = points[index]
 	                teleported = true
 	                phase = "kill"
-	                phaseStart = now
+	                phaseStart += config.teleportDelay   -- advance by plan
 	            end
 	
 	        -- Kill phase
-	        elseif phase == "kill" and elapsed >= config.deathDelay and teleported then
+	        elseif phase == "kill" and now >= phaseStart + config.deathDelay and teleported then
 	            local char = player.Character
 	            if char then
 	                pcall(function() char:BreakJoints() end)
 	            end
 	            teleported = false
 	            phase = "respawn"
-	            phaseStart = now
+	            phaseStart += config.deathDelay        -- advance by plan
 	
 	        -- Respawn phase
 	        elseif phase == "respawn" then
 	            if hrp then
-	                -- Only record cycles for roles 1 & 2
 	                if (role == 1 or role == 2) and recordCycle then
 	                    recordCycle(role)
 	                end
 	                phase = "wait"
-	                phaseStart = now
 	            end
 	
 	        -- Waiting phase
-	        elseif phase == "wait" and elapsed >= config.cycleDelay then
+	        elseif phase == "wait" and now >= phaseStart + config.cycleDelay then
 	            phase = "teleport"
-	            phaseStart = now
+	            phaseStart += config.cycleDelay        
 	            index = index % #points + 1
 	        end
 	    end)
 	end
 
--- Global monitors so OFF can clean them
-local soloMonitorActive = false
-local soloRemovingConn, soloAddedConn
-
-local function stopSoloMonitor()
-    soloMonitorActive = false
-    if soloRemovingConn and soloRemovingConn.Connected then soloRemovingConn:Disconnect() end
-    if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
-    soloRemovingConn, soloAddedConn = nil, nil
-end
-
--- SOLO fallback (only runs if starting as Player 1)
-local function startSoloFallback()
-    -- Must be in role 1 and active
-    if activeRole ~= 1 or not isActive then return end
-    if soloMonitorActive then return end  -- prevent duplicates
-    soloMonitorActive = true
-
-    local partnerName = usernameBox and usernameBox.Text or ""
-    if partnerName == "" then
-        print("⚠️ No partner name provided — switching to SOLO")
-        stopSoloMonitor()
-        if handleSoloClick then task.defer(handleSoloClick) end
-        return
-    end
-
-    local function findByName(name)
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr.Name == name or plr.DisplayName == name then
-                return plr
-            end
-        end
-        return nil
-    end
-
-    local partner = findByName(partnerName)
-    local partnerId = partner and partner.UserId
-    local soloTriggered = false
-
-    local function switchToSolo(reason)
-        if soloTriggered then return end
-        soloTriggered = true
-        stopSoloMonitor()
-        print(("⚠️ %s — switching to SOLO"):format(reason))
-        if handleSoloClick then task.defer(handleSoloClick) end
-    end
-
-    -- Strict: partner must exist at start
-    if not partnerId then
-        switchToSolo("Partner missing at start")
-        return
-    end
-
-    -- Partner exists: watch for departure and give 12s rejoin grace
-    if soloRemovingConn and soloRemovingConn.Connected then soloRemovingConn:Disconnect() end
-    soloRemovingConn = Players.PlayerRemoving:Connect(function(leavingPlayer)
-        if not soloMonitorActive or soloTriggered then return end
-        if activeRole ~= 1 or not isActive then
-            stopSoloMonitor()
-            return
-        end
-        if leavingPlayer.UserId ~= partnerId then return end
-
-        print("⚠️ Partner left — waiting 12s for rejoin")
-
-        local graceEnd = os.clock() + 12
-        local rejoined = false
-
-        if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
-        soloAddedConn = Players.PlayerAdded:Connect(function(newPlr)
-            if not soloMonitorActive then return end
-            if newPlr.UserId == partnerId then
-                rejoined = true
-                print("✅ Partner rejoined within 12s, staying in duo mode")
-                stopSoloMonitor()
-            end
-        end)
-
-        while not rejoined and os.clock() < graceEnd do
-            waitSeconds(0.25)
-            if not soloMonitorActive or activeRole ~= 1 or not isActive then
-                stopSoloMonitor()
-                return
-            end
-            local p = findByName(partnerName)
-            if p and p.UserId == partnerId then
-                rejoined = true
-                print("✅ Partner detected by polling, staying in duo mode")
-                stopSoloMonitor()
-            end
-        end
-
-        if not rejoined and activeRole == 1 and not soloTriggered and soloMonitorActive then
-            switchToSolo("Partner did not return within 12s")
-        end
-    end)
-end
+	-- Global monitors so OFF can clean them
+	local soloMonitorActive = false
+	local soloRemovingConn, soloAddedConn
+	
+	local function stopSoloMonitor()
+	    soloMonitorActive = false
+	    if soloRemovingConn and soloRemovingConn.Connected then soloRemovingConn:Disconnect() end
+	    if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
+	    soloRemovingConn, soloAddedConn = nil, nil
+	end
+	
+	-- SOLO fallback (only runs if starting as Player 1)
+	local function startSoloFallback()
+	    -- Must be in role 1 and active
+	    if activeRole ~= 1 or not isActive then return end
+	    if soloMonitorActive then return end  -- prevent duplicates
+	    soloMonitorActive = true
+	
+	    local partnerName = usernameBox and usernameBox.Text or ""
+	    if partnerName == "" then
+	        print("⚠️ No partner name provided, switching to solo.")
+	        stopSoloMonitor()
+	        if handleSoloClick then task.defer(handleSoloClick) end
+	        return
+	    end
+	
+	    local function findByName(name)
+	        for _, plr in ipairs(Players:GetPlayers()) do
+	            if plr.Name == name or plr.DisplayName == name then
+	                return plr
+	            end
+	        end
+	        return nil
+	    end
+	
+	    local partner = findByName(partnerName)
+	    local partnerId = partner and partner.UserId
+	    local soloTriggered = false
+	
+	    local function switchToSolo(reason)
+	        if soloTriggered then return end
+	        soloTriggered = true
+	        stopSoloMonitor()
+	        print(("⚠️ %s .switching to SOLO"):format(reason))
+	        if handleSoloClick then task.defer(handleSoloClick) end
+	    end
+	
+	    -- Strict: partner must exist at start
+	    if not partnerId then
+	        switchToSolo("Partner missing at start")
+	        return
+	    end
+	
+	    -- Partner exists: watch for departure and give 12s rejoin grace
+	    if soloRemovingConn and soloRemovingConn.Connected then soloRemovingConn:Disconnect() end
+	    soloRemovingConn = Players.PlayerRemoving:Connect(function(leavingPlayer)
+	        if not soloMonitorActive or soloTriggered then return end
+	        if activeRole ~= 1 or not isActive then
+	            stopSoloMonitor()
+	            return
+	        end
+	        if leavingPlayer.UserId ~= partnerId then return end
+	
+	        print("⚠️ Partner left! waiting 12s for rejoin")
+	
+	        local graceEnd = os.clock() + 12
+	        local rejoined = false
+	
+	        if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
+	        soloAddedConn = Players.PlayerAdded:Connect(function(newPlr)
+	            if not soloMonitorActive then return end
+	            if newPlr.UserId == partnerId then
+	                rejoined = true
+	                print("✅ Partner rejoined within 12s, staying in fortnite duos mode")
+	                stopSoloMonitor()
+	            end
+	        end)
+	
+	        while not rejoined and os.clock() < graceEnd do
+	            waitSeconds(0.25)
+	            if not soloMonitorActive or activeRole ~= 1 or not isActive then
+	                stopSoloMonitor()
+	                return
+	            end
+	            local p = findByName(partnerName)
+	            if p and p.UserId == partnerId then
+	                rejoined = true
+	                print("✅ Partner detected by polling, staying in fortnite duos mode")
+	                stopSoloMonitor()
+	            end
+	        end
+	
+	        if not rejoined and activeRole == 1 and not soloTriggered and soloMonitorActive then
+	            switchToSolo("Partner did not return within 12s")
+	        end
+	    end)
+	end
 	
 	-- Reset cycle tracking for a given role (roles 1 & 2 only)
 	local function resetCycles(role)
@@ -879,25 +876,26 @@ end
 	end
 	
 	handleSoloClick = function()
-	    -- cleanly stop any existing loop
+	    -- Cleanly stop any existing loop/state
 	    forceToggleOff()
 	    waitSeconds(1)
 	
-	    -- set state explicitly before starting loop
-	    activeRole = 3
-	    isActive = true
+	    -- Explicitly set SOLO state
+	    activeRole, isActive = 3, true
 	    won, timeoutElapsed = false, false
-	    -- no resetCycles(3) here
 	
+	    -- Update button appearance
 	    onOffButton.Text = "SOLO mode: ON"
 	    onOffButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+	    onOffButton.AutoButtonColor = false   -- prevent Roblox gray tint
+	    onOffButton.TextColor3 = Color3.new(1, 1, 1)
 	
-	    -- guard: ensure character is ready before first Solo cycle
+	    -- Guard: ensure character is ready before first Solo cycle
 	    local char = player.Character or player.CharacterAdded:Wait()
 	    char:WaitForChild("Humanoid")
 	    char:WaitForChild("HumanoidRootPart")
 	
-	    -- start the Solo loop
+	    -- Start the SOLO loop
 	    runLoop(3)
 	end
 end
