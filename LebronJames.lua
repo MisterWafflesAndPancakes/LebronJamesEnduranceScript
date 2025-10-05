@@ -378,8 +378,8 @@ return function()
 	        winConnection = nil
 	    end
 	
-	    -- Reset cycle tracking + restart tokens for all roles
-	    for r = 1, 3 do
+	    -- Reset cycle tracking + restart tokens for roles 1 & 2 only
+	    for r = 1, 2 do
 	        cycleDurations10[r] = {}
 	        lastCycleTime[r]    = nil
 	        restartToken[r]     = 0
@@ -720,102 +720,103 @@ return function()
 	    end)
 	end
 
-	-- SOLO fallback (only runs if starting as Player 1)
-	if role == 1 then
-	    local partnerName = usernameBox.Text  -- snapshot to avoid later edits
-	
-	    local function findByName(name)
-	        for _, plr in ipairs(Players:GetPlayers()) do
-	            if plr.Name == name or plr.DisplayName == name then
-	                return plr
-	            end
-	        end
-	        return nil
-	    end
-	
-	    local partner = findByName(partnerName)
-	    local partnerId = partner and partner.UserId
-	    local soloTriggered = false
-	    local removingConn, addedConn
-	
-	    local function cleanupConns()
-	        if removingConn and removingConn.Connected then removingConn:Disconnect() end
-	        if addedConn and addedConn.Connected then addedConn:Disconnect() end
-	        removingConn, addedConn = nil, nil
-	    end
-	
-	    local function switchToSolo(reason)
-	        if soloTriggered then return end
-	        soloTriggered = true
-	        cleanupConns()
-	        print(("⚠️ %s — switching to SOLO"):format(reason))
-	        handleSoloClick()
-	    end
-	
-	    -- If partner not found at start, give a short grace to appear
-	    if not partnerId then
-	        local searchEnd = os.clock() + 12
-	        addedConn = Players.PlayerAdded:Connect(function(newPlr)
-	            if newPlr.Name == partnerName or newPlr.DisplayName == partnerName then
-	                partnerId = newPlr.UserId
-	                print("✅ Partner appeared within 12s, staying in duo mode")
-	                cleanupConns()
-	            end
-	        end)
-	        -- Poll lightly to avoid busy-wait (and catch rename/displayname mismatches)
-	        while not partnerId and os.clock() < searchEnd do
-	            task.wait(0.25)
-	            local p = findByName(partnerName)
-	            if p then
-	                partnerId = p.UserId
-	                print("✅ Partner found by polling, staying in duo mode")
-	                cleanupConns()
-	            end
-	        end
-	        if not partnerId and activeRole == 1 and not soloTriggered then
-	            switchToSolo("Partner not found within 12s")
-	        end
-	        if soloTriggered then return end
-	    end
-	
-	    -- Partner exists: watch for departure and give 12s rejoin grace
-	    removingConn = Players.PlayerRemoving:Connect(function(leavingPlayer)
-	        if soloTriggered then return end
-	        if leavingPlayer.UserId ~= partnerId then return end
-	        if activeRole ~= 1 then return end
-	
-	        print("⚠️ Partner left — waiting 12s for rejoin")
-	
-	        local graceEnd = os.clock() + 12
-	        local rejoined = false
-	
-	        addedConn = Players.PlayerAdded:Connect(function(newPlr)
-	            if newPlr.UserId == partnerId then
-	                rejoined = true
-	                print("✅ Partner rejoined within 12s, staying in duo mode")
-	                cleanupConns()
-	            end
-	        end)
-	
-	        while not rejoined and os.clock() < graceEnd do
-	            task.wait(0.25)
-	            local p = findByName(partnerName)
-	            if p and p.UserId == partnerId then
-	                rejoined = true
-	                print("✅ Partner detected by polling, staying in duo mode")
-	                cleanupConns()
-	            end
-	            if soloTriggered or activeRole ~= 1 then
-	                cleanupConns()
-	                return
-	            end
-	        end
-	
-	        if not rejoined and activeRole == 1 and not soloTriggered then
-	            switchToSolo("Partner did not return within 12s")
-	        end
-	    end)
-	end
+-- Global monitors so OFF can clean them
+local soloMonitorActive = false
+local soloRemovingConn, soloAddedConn
+
+local function stopSoloMonitor()
+    soloMonitorActive = false
+    if soloRemovingConn and soloRemovingConn.Connected then soloRemovingConn:Disconnect() end
+    if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
+    soloRemovingConn, soloAddedConn = nil, nil
+end
+
+-- SOLO fallback (only runs if starting as Player 1)
+local function startSoloFallback()
+    -- Must be in role 1 and active
+    if activeRole ~= 1 or not isActive then return end
+    if soloMonitorActive then return end  -- prevent duplicates
+    soloMonitorActive = true
+
+    local partnerName = usernameBox and usernameBox.Text or ""
+    if partnerName == "" then
+        print("⚠️ No partner name provided — switching to SOLO")
+        stopSoloMonitor()
+        if handleSoloClick then task.defer(handleSoloClick) end
+        return
+    end
+
+    local function findByName(name)
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr.Name == name or plr.DisplayName == name then
+                return plr
+            end
+        end
+        return nil
+    end
+
+    local partner = findByName(partnerName)
+    local partnerId = partner and partner.UserId
+    local soloTriggered = false
+
+    local function switchToSolo(reason)
+        if soloTriggered then return end
+        soloTriggered = true
+        stopSoloMonitor()
+        print(("⚠️ %s — switching to SOLO"):format(reason))
+        if handleSoloClick then task.defer(handleSoloClick) end
+    end
+
+    -- Strict: partner must exist at start
+    if not partnerId then
+        switchToSolo("Partner missing at start")
+        return
+    end
+
+    -- Partner exists: watch for departure and give 12s rejoin grace
+    if soloRemovingConn and soloRemovingConn.Connected then soloRemovingConn:Disconnect() end
+    soloRemovingConn = Players.PlayerRemoving:Connect(function(leavingPlayer)
+        if not soloMonitorActive or soloTriggered then return end
+        if activeRole ~= 1 or not isActive then
+            stopSoloMonitor()
+            return
+        end
+        if leavingPlayer.UserId ~= partnerId then return end
+
+        print("⚠️ Partner left — waiting 12s for rejoin")
+
+        local graceEnd = os.clock() + 12
+        local rejoined = false
+
+        if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
+        soloAddedConn = Players.PlayerAdded:Connect(function(newPlr)
+            if not soloMonitorActive then return end
+            if newPlr.UserId == partnerId then
+                rejoined = true
+                print("✅ Partner rejoined within 12s, staying in duo mode")
+                stopSoloMonitor()
+            end
+        end)
+
+        while not rejoined and os.clock() < graceEnd do
+            waitSeconds(0.25)
+            if not soloMonitorActive or activeRole ~= 1 or not isActive then
+                stopSoloMonitor()
+                return
+            end
+            local p = findByName(partnerName)
+            if p and p.UserId == partnerId then
+                rejoined = true
+                print("✅ Partner detected by polling, staying in duo mode")
+                stopSoloMonitor()
+            end
+        end
+
+        if not rejoined and activeRole == 1 and not soloTriggered and soloMonitorActive then
+            switchToSolo("Partner did not return within 12s")
+        end
+    end)
+end
 	
 	-- Reset cycle tracking for a given role (roles 1 & 2 only)
 	local function resetCycles(role)
