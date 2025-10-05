@@ -503,11 +503,7 @@ return function()
 	        local d = delay or 0
 	        if d > 0 then waitSeconds(d) end
 	
-	        -- Stagger: ensure role 2 always starts 3s before role 1
-	        -- If role 1 is restarting, add an extra +3s offset
-	        if role == 1 then
-	            waitSeconds(3)
-	        end
+	        -- (removed the +3s stagger for Role 1)
 	
 	        -- Abort if superseded or role changed
 	        if restartToken[role] ~= token or activeRole ~= role then
@@ -549,15 +545,10 @@ return function()
 	
 	        winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
 	            if activeRole ~= 1 then return end
-	            print(("📨 Role 1 event: action=%s name=%s")
-	                :format(tostring(action), data and tostring(data.Name) or "nil"))
-	
 	            if action == "Play" and type(data) == "table" then
 	                if data.Name == "Win" or data.Name == "WinP2" then
 	                    won = true
 	                    timeoutElapsed = false
-	                    print("✅ Role 1 win event received")
-	                    -- Role 1 does not restart on win; watchdog handles timeout path
 	                end
 	            end
 	        end)
@@ -579,10 +570,10 @@ return function()
 	                if not won and activeRole == 1 then
 	                    timeoutElapsed = true
 	                    local avg = getCycleAverage(1) or (configs[1] and configs[1].cycleDelay) or 0
-	                    local delay = math.max((avg or 0) + 11, 15)
-	                    print(("⚠️ Role 1 timed out! restarting after %.2fs (avg=%.3f+11>=15)")
+	                    local delay = math.max((avg or 0) + 12, 15)
+	                    print(("⚠️ Role 1 timed out! restarting after %.2fs (avg=%.3f+12>=15)")
 	                        :format(delay, avg or 0))
-	                    restartRole(1, delay) -- role 1 will auto-stagger +3s inside restartRole
+	                    restartRole(1, delay)
 	                end
 	            end)
 	        end
@@ -604,7 +595,7 @@ return function()
 	                    local delay = math.max((avg or 0) + 24, 24)
 	                    print(("⚠️ Role 2 win detected! restarting after %.2fs (avg=%.3f+24) [event=%s]")
 	                        :format(delay, avg or 0, tostring(data.Name)))
-	                    restartRole(2, delay) -- role 2 starts immediately; role 1 is staggered
+	                    restartRole(2, delay)
 	                end
 	            end
 	        end)
@@ -697,7 +688,7 @@ return function()
 	            end
 	            teleported = false
 	            phase = "respawn"
-	            phaseStart += config.deathDelay        -- advance by plan
+	            phaseStart += config.deathDelay 
 	
 	        -- Respawn phase
 	        elseif phase == "respawn" then
