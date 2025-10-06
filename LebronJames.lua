@@ -503,8 +503,6 @@ return function()
 	        local d = delay or 0
 	        if d > 0 then waitSeconds(d) end
 	
-	        -- (removed the +3s stagger for Role 1)
-	
 	        -- Abort if superseded or role changed
 	        if restartToken[role] ~= token or activeRole ~= role then
 	            print(("ℹ️ Restart for role %d skipped (superseded or role changed)"):format(role))
@@ -546,7 +544,7 @@ return function()
 	        winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
 	            if activeRole ~= 1 then return end
 	            if action == "Play" and type(data) == "table" then
-	                -- ✅ Now includes WinP1 as a valid win for Role 1
+	                -- ✅ Includes WinP1 as a valid win for Role 1
 	                if data.Name == "Win" or data.Name == "WinP1" then
 	                    won = true
 	                    timeoutElapsed = false
@@ -561,13 +559,15 @@ return function()
 	            task.spawn(function()
 	                local startTime = os.clock()
 	                local windowSeconds = 15
+	
 	                while os.clock() - startTime < windowSeconds do
 	                    if won or activeRole ~= 1 then
-	                        return
+	                        return -- exit early if win or role change
 	                    end
-	                    RunService.Heartbeat:Wait()
+	                    waitSeconds(0.1)
 	                end
 	
+	                -- If we reach here, 15s elapsed with no win
 	                if not won and activeRole == 1 then
 	                    timeoutElapsed = true
 	                    local avg = getCycleAverage(1) or (configs[1] and configs[1].cycleDelay) or 0
