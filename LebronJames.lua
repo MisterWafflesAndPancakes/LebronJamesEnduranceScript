@@ -546,7 +546,8 @@ return function()
 	        winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
 	            if activeRole ~= 1 then return end
 	            if action == "Play" and type(data) == "table" then
-	                if data.Name == "Win" or data.Name == "WinP2" then
+	                -- ✅ Now includes WinP1 as a valid win for Role 1
+	                if data.Name == "Win" or data.Name == "WinP1" then
 	                    won = true
 	                    timeoutElapsed = false
 	                end
@@ -708,17 +709,17 @@ return function()
 	    end)
 	end
 
-	-- Global monitors so OFF can clean them
-	local soloMonitorActive = false
-	local soloRemovingConn, soloAddedConn
-	
-	local function stopSoloMonitor()
-	    soloMonitorActive = false
-	    if soloRemovingConn and soloRemovingConn.Connected then soloRemovingConn:Disconnect() end
-	    if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
-	    soloRemovingConn, soloAddedConn = nil, nil
-	end
-	
+-- Global monitors so OFF can clean them
+local soloMonitorActive = false
+local soloRemovingConn, soloAddedConn
+
+local function stopSoloMonitor()
+    soloMonitorActive = false
+    if soloRemovingConn and soloRemovingConn.Connected then soloRemovingConn:Disconnect() end
+    if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
+    soloRemovingConn, soloAddedConn = nil, nil
+end
+
 	-- SOLO fallback (only runs if starting as Player 1)
 	local function startSoloFallback()
 	    -- Must be in role 1 and active
@@ -804,6 +805,12 @@ return function()
 	            switchToSolo("Partner did not return within 12s")
 	        end
 	    end)
+	end
+	
+	-- 🔗 Integration: arm the solo fallback when Role 1 is active
+	-- Call this once Role 1 is started so the monitor is live
+	if activeRole == 1 and isActive then
+	    startSoloFallback()
 	end
 	
 	-- Reset cycle tracking for a given role (roles 1 & 2 only)
