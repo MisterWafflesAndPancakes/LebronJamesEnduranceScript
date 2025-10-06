@@ -672,13 +672,13 @@ return function()
 	
 	        local now = os.clock()
 	
-	        -- TELEPORT
+	        -- Teleport phase
 	        if phase == "teleport" and now >= phaseStart + config.teleportDelay then
 	            if hrp then
 	                hrp.CFrame = points[index]
 	                teleported = true
 	                phase = "kill"
-	                phaseStart += config.teleportDelay   -- advance by plan
+	                phaseStart += config.teleportDelay  
 	            end
 	
 	        -- Kill phase
@@ -709,17 +709,17 @@ return function()
 	    end)
 	end
 
--- Global monitors so OFF can clean them
-local soloMonitorActive = false
-local soloRemovingConn, soloAddedConn
-
-local function stopSoloMonitor()
-    soloMonitorActive = false
-    if soloRemovingConn and soloRemovingConn.Connected then soloRemovingConn:Disconnect() end
-    if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
-    soloRemovingConn, soloAddedConn = nil, nil
-end
-
+		-- Global monitors so OFF can clean them
+	local soloMonitorActive = false
+	local soloRemovingConn, soloAddedConn
+	
+	local function stopSoloMonitor()
+	    soloMonitorActive = false
+	    if soloRemovingConn and soloRemovingConn.Connected then soloRemovingConn:Disconnect() end
+	    if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
+	    soloRemovingConn, soloAddedConn = nil, nil
+	end
+	
 	-- SOLO fallback (only runs if starting as Player 1)
 	local function startSoloFallback()
 	    -- Must be in role 1 and active
@@ -755,13 +755,7 @@ end
 	        print(("⚠️ %s .switching to SOLO"):format(reason))
 	        if handleSoloClick then task.defer(handleSoloClick) end
 	    end
-	
-	    -- Strict: partner must exist at start
-	    if not partnerId then
-	        switchToSolo("Partner missing at start")
-	        return
-	    end
-	
+			
 	    -- Partner exists: watch for departure and give 12s rejoin grace
 	    if soloRemovingConn and soloRemovingConn.Connected then soloRemovingConn:Disconnect() end
 	    soloRemovingConn = Players.PlayerRemoving:Connect(function(leavingPlayer)
@@ -808,7 +802,6 @@ end
 	end
 	
 	-- 🔗 Integration: arm the solo fallback when Role 1 is active
-	-- Call this once Role 1 is started so the monitor is live
 	if activeRole == 1 and isActive then
 	    startSoloFallback()
 	end
