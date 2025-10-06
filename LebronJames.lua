@@ -571,8 +571,8 @@ return function()
 	                if not won and activeRole == 1 then
 	                    timeoutElapsed = true
 	                    local avg = getCycleAverage(1) or (configs[1] and configs[1].cycleDelay) or 0
-	                    local delay = math.max((avg or 0) + 12, 15)
-	                    print(("⚠️ Role 1 timed out! restarting after %.2fs (avg=%.3f+12>=15)")
+	                    local delay = math.max((avg or 0) + 9)
+	                    print(("⚠️ Role 1 timed out! restarting after %.2fs (avg=%.3f+20)")
 	                        :format(delay, avg or 0))
 	                    restartRole(1, delay)
 	                end
@@ -715,16 +715,13 @@ return function()
 	-- Global monitors so OFF can clean them
 	local soloMonitorActive = false
 	local soloAddedConn -- used only during grace window
-	local soloPresenceTask -- polling task for presence/disappearance
+	local soloPresenceTask -- background task flag (boolean)
 	
 	local function stopSoloMonitor()
 	    soloMonitorActive = false
 	    if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
 	    soloAddedConn = nil
-	    if soloPresenceTask and coroutine.status(soloPresenceTask) ~= "dead" then
-	        -- We can't forcibly kill coroutines; use the active flag to let it exit.
-	    end
-	    soloPresenceTask = nil
+	    soloPresenceTask = nil -- loop will exit on next iteration
 	end
 	
 	-- SOLO fallback (only runs if starting as Player 1)
@@ -744,7 +741,7 @@ return function()
 	
 	    local function findByName(name)
 	        for _, plr in ipairs(Players:GetPlayers()) do
-	            if plr.Name == name or plr.DisplayName == name then
+	            if plr.Name == name then
 	                return plr
 	            end
 	        end
@@ -761,17 +758,23 @@ return function()
 	    end
 	
 	    -- Presence watcher: detect disappearance, then start 12s grace
-	    soloPresenceTask = coroutine.create(function()
-	        local wasPresent = (findByName(partnerName) ~= nil)
+	    soloPresenceTask = true
+	    task.spawn(function()
+	        local partner = findByName(partnerName)
+	        local stablePartnerId = partner and partner.UserId -- persist ID once known
+	        local wasPresent = (partner ~= nil)
 	        local inGrace = false
 	        local graceEnd = 0
 	        local rejoined = false
 	
 	        while soloMonitorActive and not soloTriggered and activeRole == 1 and isActive do
-	            -- Current presence
-	            local partner = findByName(partnerName)
+	            partner = findByName(partnerName)
 	            local present = (partner ~= nil)
-	            local partnerId = partner and partner.UserId
+	
+	            -- Capture ID once, when first seen
+	            if present and not stablePartnerId then
+	                stablePartnerId = partner.UserId
+	            end
 	
 	            -- Transition: present -> absent → start grace
 	            if wasPresent and not present and not inGrace then
@@ -780,13 +783,12 @@ return function()
 	                rejoined = false
 	                graceEnd = os.clock() + 12
 	
-	                -- Listen for explicit rejoin by UserId during grace
 	                if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
 	                soloAddedConn = Players.PlayerAdded:Connect(function(newPlr)
 	                    if not soloMonitorActive or not inGrace then return end
-	                    if partnerId and newPlr.UserId == partnerId then
+	                    if stablePartnerId and newPlr.UserId == stablePartnerId then
 	                        rejoined = true
-	                        print("✅ Partner rejoined within 12s, staying in fortnite duos mode")
+	                        print("✅ Partner rejoined within 12s, staying in duos mode")
 	                        inGrace = false
 	                        if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
 	                        soloAddedConn = nil
@@ -796,17 +798,15 @@ return function()
 	
 	            -- If in grace, check for polling-detected return or timeout
 	            if inGrace then
-	                -- Polling detected return
 	                local p = findByName(partnerName)
-	                if p and partnerId and p.UserId == partnerId then
+	                if p and stablePartnerId and p.UserId == stablePartnerId then
 	                    rejoined = true
-	                    print("✅ Partner detected by polling, staying in fortnite duos mode")
+	                    print("✅ Partner detected by polling, staying in duos mode")
 	                    inGrace = false
 	                    if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
 	                    soloAddedConn = nil
 	                end
 	
-	                -- Timed out
 	                if not rejoined and os.clock() >= graceEnd then
 	                    if soloMonitorActive and activeRole == 1 and not soloTriggered then
 	                        switchToSolo("Partner did not return within 12s")
@@ -819,8 +819,6 @@ return function()
 	            task.wait(0.25)
 	        end
 	    end)
-	
-	    task.spawn(soloPresenceTask)
 	end
 	
 	-- 🔗 Integration: arm the solo fallback when Role 1 is active
