@@ -552,32 +552,31 @@ return function()
 	            end
 	        end)
 	
-	        if not role1WatchdogArmed and activeRole == 1 then
-	            role1WatchdogArmed = true
-	            print("⏱️ Role 1 watchdog armed (15s window)")
-	
-	            task.spawn(function()
-	                local startTime = os.clock()
-	                local windowSeconds = 15
-	
-	                while os.clock() - startTime < windowSeconds do
-	                    if won or activeRole ~= 1 then
-	                        return -- exit early if win or role change
-	                    end
-	                    waitSeconds(0.1)
-	                end
-	
-	                -- If we reach here, 15s elapsed with no win
-	                if not won and activeRole == 1 then
-	                    timeoutElapsed = true
-	                    local avg = getCycleAverage(1) or (configs[1] and configs[1].cycleDelay) or 0
-	                    local delay = math.max((avg or 0) + 9)
-	                    print(("⚠️ Role 1 timed out! restarting after %.2fs (avg=%.3f+20)")
-	                        :format(delay, avg or 0))
-	                    restartRole(1, delay)
-	                end
-	            end)
-	        end
+		if not role1WatchdogArmed and activeRole == 1 then
+		    role1WatchdogArmed = true
+		    print("⏱️ Role 1 watchdog armed (15s window)")
+		
+		    task.spawn(function()
+		        local startTime = os.clock()
+		        local windowSeconds = 15
+		
+		        while os.clock() - startTime < windowSeconds do
+		            if activeRole ~= 1 then
+		                return -- bail if role changed
+		            end
+		            waitSeconds(0.1)
+		        end
+		
+		        -- If we reach here, 15s elapsed with no win
+		        if not won and activeRole == 1 then
+		            timeoutElapsed = true
+		            local avg = getCycleAverage(1) or (configs[1] and configs[1].cycleDelay) or 0
+		            local delay = math.max((avg or 0) + 9, 22) -- example formula
+		            print(("⚠️ Role 1 timed out! restarting after %.2fs (avg=%.3f+9)"):format(delay, avg or 0))
+		            restartRole(1, delay)
+		        end
+		    end)
+		end
 	
 	    elseif role == 2 then
 	        winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
@@ -709,26 +708,22 @@ return function()
 	    end)
 	end
 
-	-- Services
 	local Players = game:GetService("Players")
 	
-	-- Global monitors so OFF can clean them
 	local soloMonitorActive = false
-	local soloAddedConn -- used only during grace window
-	local soloPresenceTask -- background task flag (boolean)
+	local soloAddedConn
+	local soloPresenceTask
 	
 	local function stopSoloMonitor()
 	    soloMonitorActive = false
 	    if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
 	    soloAddedConn = nil
-	    soloPresenceTask = nil -- loop will exit on next iteration
+	    soloPresenceTask = nil
 	end
 	
-	-- SOLO fallback (only runs if starting as Player 1)
 	local function startSoloFallback()
-	    -- Must be in role 1 and active
 	    if activeRole ~= 1 or not isActive then return end
-	    if soloMonitorActive then return end -- prevent duplicates
+	    if soloMonitorActive then return end
 	    soloMonitorActive = true
 	
 	    local partnerName = usernameBox and usernameBox.Text or ""
@@ -757,71 +752,54 @@ return function()
 	        if handleSoloClick then task.defer(handleSoloClick) end
 	    end
 	
-	    -- Presence watcher: detect disappearance, then start 12s grace
 	    soloPresenceTask = true
 	    task.spawn(function()
-	        local partner = findByName(partnerName)
-	        local stablePartnerId = partner and partner.UserId -- persist ID once known
-	        local wasPresent = (partner ~= nil)
+	        local stablePartnerId
 	        local inGrace = false
 	        local graceEnd = 0
-	        local rejoined = false
 	
 	        while soloMonitorActive and not soloTriggered and activeRole == 1 and isActive do
-	            partner = findByName(partnerName)
-	            local present = (partner ~= nil)
-	
-	            -- Capture ID once, when first seen
-	            if present and not stablePartnerId then
+	            local partner = findByName(partnerName)
+	            if partner and not stablePartnerId then
 	                stablePartnerId = partner.UserId
 	            end
 	
-	            -- Transition: present -> absent → start grace
-	            if wasPresent and not present and not inGrace then
-	                print("⚠️ Partner left! waiting 12s for rejoin")
-	                inGrace = true
-	                rejoined = false
-	                graceEnd = os.clock() + 12
-	
-	                if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
-	                soloAddedConn = Players.PlayerAdded:Connect(function(newPlr)
-	                    if not soloMonitorActive or not inGrace then return end
-	                    if stablePartnerId and newPlr.UserId == stablePartnerId then
-	                        rejoined = true
-	                        print("✅ Partner rejoined within 12s, staying in duos mode")
-	                        inGrace = false
-	                        if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
-	                        soloAddedConn = nil
-	                    end
-	                end)
-	            end
-	
-	            -- If in grace, check for polling-detected return or timeout
-	            if inGrace then
-	                local p = findByName(partnerName)
-	                if p and stablePartnerId and p.UserId == stablePartnerId then
-	                    rejoined = true
-	                    print("✅ Partner detected by polling, staying in duos mode")
-	                    inGrace = false
-	                    if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
+	            if partner then
+	                -- Partner present: cancel grace
+	                inGrace = false
+	                if soloAddedConn and soloAddedConn.Connected then
+	                    soloAddedConn:Disconnect()
 	                    soloAddedConn = nil
 	                end
+	            else
+	                -- Partner absent
+	                if not inGrace then
+	                    print("⚠️ Partner missing! 12s grace window started")
+	                    inGrace = true
+	                    graceEnd = os.clock() + 12
 	
-	                if not rejoined and os.clock() >= graceEnd then
-	                    if soloMonitorActive and activeRole == 1 and not soloTriggered then
-	                        switchToSolo("Partner did not return within 12s")
-	                        break
-	                    end
+	                    if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
+	                    soloAddedConn = Players.PlayerAdded:Connect(function(newPlr)
+	                        if not soloMonitorActive or not inGrace then return end
+	                        if stablePartnerId and newPlr.UserId == stablePartnerId then
+	                            print("✅ Partner rejoined within 12s, staying in duos mode")
+	                            inGrace = false
+	                            if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
+	                            soloAddedConn = nil
+	                        end
+	                    end)
+	                elseif os.clock() >= graceEnd then
+	                    switchToSolo("Partner did not return within 12s")
+	                    break
 	                end
 	            end
 	
-	            wasPresent = present
 	            task.wait(0.25)
 	        end
 	    end)
 	end
 	
-	-- 🔗 Integration: arm the solo fallback when Role 1 is active
+	-- Integration
 	if activeRole == 1 and isActive then
 	    startSoloFallback()
 	end
