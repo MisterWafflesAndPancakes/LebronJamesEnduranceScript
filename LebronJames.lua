@@ -548,44 +548,35 @@ return function()
 	                if data.Name == "Win" or data.Name == "WinP1" then
 	                    won = true
 	                    timeoutElapsed = false
-	
-	                    -- 🔄 Reset won after a short delay so the next watchdog can run
-	                    task.delay(1, function()
-	                        if activeRole == 1 then
-	                            won = false
-	                        end
-	                    end)
 	                end
 	            end
 	        end)
 	
-	        if not role1WatchdogArmed and activeRole == 1 then
-	            role1WatchdogArmed = true
-	            print("⌚ Role 1 watchdog armed (15s window)")
-	
-	            task.spawn(function()
-	                local startTime = os.clock()
-	                local windowSeconds = 15
-	
-	                while os.clock() - startTime < windowSeconds do
-	                    if activeRole ~= 1 then
-	                        return -- bail if role changed
-	                    end
-	                    waitSeconds(0.1)
-	                end
-	
-	                -- If we reach here, 15s elapsed with no win
-	                if not won and activeRole == 1 then
-	                    timeoutElapsed = true
-	                    local avg = getCycleAverage(1) or (configs[1] and configs[1].cycleDelay) or 0
-	                    local delay = math.max((avg or 0) + 9, 22) -- example formula
-	                    print(("⚠️ Role 1 timed out! restarting after %.2fs (avg=%.3f+9)"):format(delay, avg or 0))
-	                    restartRole(1, delay)
-	                end
-	            end)
-	        end
-	    end
-	end
+		if not role1WatchdogArmed and activeRole == 1 then
+		    role1WatchdogArmed = true
+		    print("⏱️ Role 1 watchdog armed (15s window)")
+		
+		    task.spawn(function()
+		        local startTime = os.clock()
+		        local windowSeconds = 15
+		
+		        while os.clock() - startTime < windowSeconds do
+		            if activeRole ~= 1 then
+		                return -- bail if role changed
+		            end
+		            waitSeconds(0.1)
+		        end
+		
+		        -- If we reach here, 15s elapsed with no win
+		        if not won and activeRole == 1 then
+		            timeoutElapsed = true
+		            local avg = getCycleAverage(1) or (configs[1] and configs[1].cycleDelay) or 0
+		            local delay = math.max((avg or 0) + 9, 22) -- example formula
+		            print(("⚠️ Role 1 timed out! restarting after %.2fs (avg=%.3f+9)"):format(delay, avg or 0))
+		            restartRole(1, delay)
+		        end
+		    end)
+		end
 	
 	    elseif role == 2 then
 	        winConnection = SoundEvent.OnClientEvent:Connect(function(action, data)
@@ -593,6 +584,7 @@ return function()
 	            if action == "Play" and type(data) == "table" then
 	                if data.Name == "WinP2" or data.Name == "Win" then
 	                    won = true
+	                    timeoutElapsed = false
 	
 	                    if winConnection and winConnection.Connected then
 	                        winConnection:Disconnect()
@@ -724,9 +716,7 @@ return function()
 	
 	local function stopSoloMonitor()
 	    soloMonitorActive = false
-	    if soloAddedConn and soloAddedConn.Connected then
-	        soloAddedConn:Disconnect()
-	    end
+	    if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
 	    soloAddedConn = nil
 	    soloPresenceTask = nil
 	end
@@ -777,7 +767,6 @@ return function()
 	            if partner then
 	                -- Partner present: cancel grace
 	                inGrace = false
-	                graceEnd = 0
 	                if soloAddedConn and soloAddedConn.Connected then
 	                    soloAddedConn:Disconnect()
 	                    soloAddedConn = nil
@@ -789,19 +778,13 @@ return function()
 	                    inGrace = true
 	                    graceEnd = os.clock() + 12
 	
-	                    if soloAddedConn and soloAddedConn.Connected then
-	                        soloAddedConn:Disconnect()
-	                    end
+	                    if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
 	                    soloAddedConn = Players.PlayerAdded:Connect(function(newPlr)
 	                        if not soloMonitorActive or not inGrace then return end
-	                        if (stablePartnerId and newPlr.UserId == stablePartnerId)
-	                           or newPlr.Name == partnerName then
+	                        if stablePartnerId and newPlr.UserId == stablePartnerId then
 	                            print("✅ Partner rejoined within 12s, staying in duos mode")
 	                            inGrace = false
-	                            graceEnd = 0
-	                            if soloAddedConn and soloAddedConn.Connected then
-	                                soloAddedConn:Disconnect()
-	                            end
+	                            if soloAddedConn and soloAddedConn.Connected then soloAddedConn:Disconnect() end
 	                            soloAddedConn = nil
 	                        end
 	                    end)
@@ -811,7 +794,7 @@ return function()
 	                end
 	            end
 	
-	            waitSeconds(0.25)
+	            task.wait(0.25)
 	        end
 	    end)
 	end
